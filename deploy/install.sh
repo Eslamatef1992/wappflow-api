@@ -161,6 +161,13 @@ META_ES_CONFIG_ID=
 
 TRIAL_DAYS=14
 GRACE_DAYS=5
+# PayPal (developer.paypal.com → Apps & Credentials). Leave empty to hide PayPal.
+PAYPAL_CLIENT_ID=
+PAYPAL_SECRET=
+PAYPAL_MODE=live
+PAYPAL_CURRENCY=USD
+# 1 KWD in PAYPAL_CURRENCY (PayPal cannot charge in KWD)
+PAYPAL_FX_RATE=3.26
 TAP_SECRET_KEY=
 BANK_DETAILS="Bank transfer details: edit BANK_DETAILS in $ENV_FILE"
 
@@ -180,6 +187,10 @@ EOF
 else
   sed -i "s#^APP_URL=.*#APP_URL=https://$ADMIN_DOMAIN#; s#^API_URL=.*#API_URL=https://$API_DOMAIN#; s#^SITE_URL=.*#SITE_URL=https://$WEB_DOMAIN,https://$APEX_DOMAIN#" "$ENV_FILE"
   if [ -f "$LOGIN_FILE" ]; then sed -i "s#^URL: .*#URL:      https://$ADMIN_DOMAIN/login#" "$LOGIN_FILE"; fi
+  if ! grep -q '^PAYPAL_CLIENT_ID=' "$ENV_FILE"; then
+    printf '\n# PayPal (developer.paypal.com → Apps & Credentials). Leave empty to hide PayPal.\nPAYPAL_CLIENT_ID=\nPAYPAL_SECRET=\nPAYPAL_MODE=live\nPAYPAL_CURRENCY=USD\n# 1 KWD in PAYPAL_CURRENCY (PayPal cannot charge in KWD)\nPAYPAL_FX_RATE=3.26\n' >> "$ENV_FILE"
+    c_ok "Added PayPal settings to $ENV_FILE (empty until you fill them in)"
+  fi
   c_ok "Keeping existing configuration ($ENV_FILE), addresses set to $DOMAIN"
 fi
 chown -R www-data:www-data "$APP_DIR/web" "$APP_DIR/admin" 2>/dev/null || true
@@ -279,7 +290,10 @@ echo " Meta → WhatsApp → Configuration → Webhook"
 echo "   Callback URL   https://$API_DOMAIN/webhooks/whatsapp"
 echo "   Verify token   $VERIFY_TOKEN"
 echo
+echo " PayPal → Webhooks (optional backup)"
+echo "   URL            https://$API_DOMAIN/api/billing/paypal/webhook   events: Checkout order approved, Payment capture completed"
+echo
 echo " Settings file  $ENV_FILE   (after editing: pm2 reload $PM2_NAME --update-env)"
 echo " Logs           pm2 logs $PM2_NAME"
-echo " Update later   upload a new package and run: sudo bash install.sh"
+echo " Update later   push to GitHub, then run: wappflow-update"
 echo "───────────────────────────────────────────────────────────────────────────────"

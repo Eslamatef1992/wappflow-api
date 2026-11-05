@@ -1,4 +1,4 @@
-// Inbound webhooks from Meta (WhatsApp), Shopify, WooCommerce and Tap Payments.
+// Inbound webhooks from Meta (WhatsApp), Shopify, WooCommerce, Tap Payments and PayPal.
 import { Router } from 'express';
 import { config } from '../config.js';
 import { db, now } from '../db.js';
@@ -6,6 +6,7 @@ import { h, hmacHex, hmacB64, safeEqual, decrypt } from '../lib/util.js';
 import { enqueue } from '../lib/jobs.js';
 import { createOrUpdateOrder, mapShopify, mapWoo } from '../services/commerce.js';
 import { confirmTapCharge } from '../services/billing.js';
+import { capturePaypalOrder, handlePaypalWebhook } from '../services/paypal.js';
 
 const r = Router();
 
@@ -57,6 +58,20 @@ r.post('/hooks/woocommerce/:token', h(async (req, res) => {
     await createOrUpdateOrder(found.tenant, mapWoo(req.body));
   }
   await db('integrations').where({ id: found.i.id }).update({ last_event_at: now() });
+  res.sendStatus(200);
+}));
+
+// ---- PayPal ----
+// Customer comes back from PayPal with ?token=<order id>; we capture it server-side.
+r.get('/api/billing/paypal/return', h(async (req, res) => {
+  let paid = null;
+  try { paid = await capturePaypalOrder(req.query.token); } catch (e) { console.error('[paypal] return', e.message); }
+  res.redirect(`${config.appUrl}/app/billing?payment=${paid ? 'success' : 'pending'}`);
+}));
+// Backup for customers who close the window after paying. The body is only used to find the
+// order id; the payment itself is verified by calling PayPal's API.
+r.post('/api/billing/paypal/webhook', h(async (req, res) => {
+  try { await handlePaypalWebhook(req.body); } catch (e) { console.error('[paypal] webhook', e.message); }
   res.sendStatus(200);
 }));
 

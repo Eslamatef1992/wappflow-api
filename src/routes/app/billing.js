@@ -3,6 +3,7 @@ import { db, now } from '../../db.js';
 import { h, bad, notFound, required } from '../../lib/util.js';
 import { requireRole } from '../../lib/auth.js';
 import { planFor, usageFor, serializePlan, createInvoice, createTapCharge, tapEnabled } from '../../services/billing.js';
+import { paypalEnabled, paypalAmount, createPaypalOrder, capturePaypalOrder } from '../../services/paypal.js';
 
 const r = Router();
 
@@ -15,7 +16,12 @@ r.get('/billing', h(async (req, res) => {
     usage: await usageFor(req.tenant.id),
     invoices: await db('invoices').where({ tenant_id: req.tenant.id }).orderBy('id', 'desc').limit(36),
     plans: (await db('plans').where({ is_active: true }).orderBy('sort')).map(serializePlan),
-    onlinePayments: tapEnabled(),
+    onlinePayments: tapEnabled() || paypalEnabled(),
+    paymentMethods: { tap: tapEnabled(), paypal: paypalEnabled() },
+    // what PayPal will charge for each unpaid invoice (PayPal has no KWD, so it is converted)
+    paypalQuotes: paypalEnabled()
+      ? Object.fromEntries((await db('invoices').where({ tenant_id: req.tenant.id, status: 'unpaid' })).map((i) => [i.id, paypalAmount(i)]))
+      : {},
     bankDetails: process.env.BANK_DETAILS || null,
   });
 }));
@@ -37,7 +43,21 @@ r.post('/billing/invoices/:id/pay', requireRole('owner', 'admin'), h(async (req,
   const inv = await db('invoices').where({ id: req.params.id, tenant_id: req.tenant.id }).first();
   if (!inv) throw notFound('Invoice');
   if (inv.status !== 'unpaid') throw bad(`Invoice is ${inv.status}`);
+  const method = req.body?.method || (paypalEnabled() && !tapEnabled() ? 'paypal' : 'tap');
+  if (method === 'paypal') {
+    const { url } = await createPaypalOrder(inv, req.tenant);
+    return res.json({ url });
+  }
   res.json({ url: await createTapCharge(inv, req.tenant, req.user) });
+}));
+
+/** "I already paid": re-check an invoice's PayPal order (e.g. the customer closed the window before returning). */
+r.post('/billing/invoices/:id/check', requireRole('owner', 'admin'), h(async (req, res) => {
+  const inv = await db('invoices').where({ id: req.params.id, tenant_id: req.tenant.id }).first();
+  if (!inv) throw notFound('Invoice');
+  if (inv.status === 'paid') return res.json({ paid: true });
+  const paid = inv.provider === 'paypal' ? await capturePaypalOrder(inv.provider_ref) : null;
+  res.json({ paid: !!paid });
 }));
 
 r.post('/billing/cancel', requireRole('owner'), h(async (req, res) => {

@@ -5,12 +5,13 @@ import { db, now, insert } from '../db.js';
 import { h, bad, required, slugify, HttpError } from '../lib/util.js';
 import { signToken, publicUser, requireAuth } from '../lib/auth.js';
 import { startTrial, planFor, usageFor, serializePlan, tapEnabled } from '../services/billing.js';
+import { paypalEnabled } from '../services/paypal.js';
 
 const r = Router();
 
 r.get('/config', h(async (_req, res) => {
   const plans = await db('plans').where({ is_active: true }).orderBy('sort');
-  res.json({ brand: config.brand, allowSignup: config.allowSignup, trialDays: config.trialDays, onlinePayments: tapEnabled(), plans: plans.map(serializePlan), metaAppId: config.meta.appId || null, embeddedSignupConfigId: config.meta.embeddedSignupConfigId || null });
+  res.json({ brand: config.brand, allowSignup: config.allowSignup, trialDays: config.trialDays, onlinePayments: tapEnabled() || paypalEnabled(), plans: plans.map(serializePlan), metaAppId: config.meta.appId || null, embeddedSignupConfigId: config.meta.embeddedSignupConfigId || null });
 }));
 
 r.post('/signup', h(async (req, res) => {

@@ -54,6 +54,16 @@ export const config = {
     verifyToken: env.META_VERIFY_TOKEN || 'wappflow-verify-token',
     embeddedSignupConfigId: env.META_ES_CONFIG_ID || '',
   },
+  paypal: {
+    clientId: env.PAYPAL_CLIENT_ID || '',
+    secret: env.PAYPAL_SECRET || '',
+    mode: env.PAYPAL_MODE === 'live' ? 'live' : 'sandbox',
+    // PayPal does not support KWD: invoices in an unsupported currency are charged in this currency
+    currency: (env.PAYPAL_CURRENCY || 'USD').toUpperCase(),
+    // how many PAYPAL_CURRENCY units per 1 unit of the invoice currency (e.g. 1 KWD = 3.26 USD)
+    fxRate: +(env.PAYPAL_FX_RATE || 3.26),
+    apiBase: env.PAYPAL_API_BASE || '',
+  },
   tap: {
     secretKey: env.TAP_SECRET_KEY || '', // empty = online payments disabled, manual invoices only
     apiBase: env.TAP_API_BASE || 'https://api.tap.company/v2',
