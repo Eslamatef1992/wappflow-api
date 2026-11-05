@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { config } from '../../config.js';
 import { db, now } from '../../db.js';
 import { h, bad, notFound, required } from '../../lib/util.js';
 import { requireRole } from '../../lib/auth.js';
@@ -6,6 +7,12 @@ import { planFor, usageFor, serializePlan, createInvoice, createTapCharge, tapEn
 import { paypalEnabled, paypalAmount, createPaypalOrder, capturePaypalOrder } from '../../services/paypal.js';
 
 const r = Router();
+
+// pay buttons shown to customers: switched on in PAYMENT_METHODS and configured on the server
+const methods = () => {
+  const on = (m) => config.paymentMethods.includes(m);
+  return { card: on('card') && paypalEnabled(), paypal: on('paypal') && paypalEnabled(), tap: on('tap') && tapEnabled() };
+};
 
 // the installer writes a placeholder; never show that to customers
 const bankDetails = () => {
@@ -22,9 +29,9 @@ r.get('/billing', h(async (req, res) => {
     usage: await usageFor(req.tenant.id),
     invoices: await db('invoices').where({ tenant_id: req.tenant.id }).orderBy('id', 'desc').limit(36),
     plans: (await db('plans').where({ is_active: true }).orderBy('sort')).map(serializePlan),
-    onlinePayments: tapEnabled() || paypalEnabled(),
+    onlinePayments: Object.values(methods()).some(Boolean),
     // card = PayPal's guest checkout (Visa/Mastercard without a PayPal account)
-    paymentMethods: { tap: tapEnabled(), paypal: paypalEnabled(), card: paypalEnabled() },
+    paymentMethods: methods(),
     // what PayPal will charge for each unpaid invoice (PayPal has no KWD, so it is converted)
     paypalQuotes: paypalEnabled()
       ? Object.fromEntries((await db('invoices').where({ tenant_id: req.tenant.id, status: 'unpaid' })).map((i) => [i.id, paypalAmount(i)]))
@@ -54,7 +61,9 @@ r.post('/billing/invoices/:id/pay', requireRole('owner', 'admin'), h(async (req,
   const inv = await db('invoices').where({ id: req.params.id, tenant_id: req.tenant.id }).first();
   if (!inv) throw notFound('Invoice');
   if (inv.status !== 'unpaid') throw bad(`Invoice is ${inv.status}`);
-  const method = req.body?.method || (paypalEnabled() && !tapEnabled() ? 'paypal' : 'tap');
+  const available = Object.entries(methods()).filter(([, v]) => v).map(([k]) => k);
+  const method = req.body?.method || available[0];
+  if (!available.includes(method)) throw bad('This payment method is not available');
   if (method === 'paypal' || method === 'card') {
     const { url } = await createPaypalOrder(inv, req.tenant, { card: method === 'card' });
     return res.json({ url });

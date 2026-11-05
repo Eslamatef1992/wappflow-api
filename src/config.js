@@ -54,6 +54,8 @@ export const config = {
     verifyToken: env.META_VERIFY_TOKEN || 'wappflow-verify-token',
     embeddedSignupConfigId: env.META_ES_CONFIG_ID || '',
   },
+  // which pay buttons customers see: card (Visa/Mastercard via PayPal's card form), paypal, tap
+  paymentMethods: (env.PAYMENT_METHODS || 'card').split(',').map((m) => m.trim().toLowerCase()).filter(Boolean),
   mailgun: {
     apiKey: env.MAILGUN_API_KEY || '', domain: env.MAILGUN_DOMAIN || '', region: env.MAILGUN_REGION === 'eu' ? 'eu' : 'us',
     from: env.MAILGUN_FROM || `${env.BRAND_NAME || 'WappFlow'} <billing@${env.MAILGUN_DOMAIN || 'example.com'}>`,

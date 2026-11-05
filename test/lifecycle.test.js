@@ -82,3 +82,8 @@ test('the next renewal locks again if not paid', async () => {
   await billing.runBillingCycle();
   assert.equal((await db('invoices').where({ tenant_id: tenantId, status: 'unpaid' })).length, 1);
 });
+
+test('by default only Visa / Mastercard is offered', async () => {
+  const { config } = await import('../src/config.js');
+  assert.deepEqual(config.paymentMethods, ['card']);
+});

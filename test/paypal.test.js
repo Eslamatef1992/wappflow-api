@@ -50,7 +50,7 @@ before(async () => {
   await new Promise((r) => fake.listen(0, r));
   Object.assign(process.env, {
     DB_FILE: dbFile, DB_CLIENT: '', PAYPAL_CLIENT_ID: 'cid', PAYPAL_SECRET: 'sec',
-    PAYPAL_API_BASE: `http://127.0.0.1:${fake.address().port}`, PAYPAL_CURRENCY: 'USD', PAYPAL_FX_RATE: '3.26',
+    PAYPAL_API_BASE: `http://127.0.0.1:${fake.address().port}`, PAYPAL_CURRENCY: 'USD', PAYPAL_FX_RATE: '3.26', PAYMENT_METHODS: 'card,paypal',
   });
   execFileSync('node', ['src/scripts/seed.js', '--demo'], { env: process.env, cwd: path.resolve(import.meta.dirname, '..') });
   const { createApp } = await import('../src/app.js');
