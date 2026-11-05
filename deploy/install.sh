@@ -15,7 +15,7 @@
 #   ADMIN_EMAIL=you@x.com     super-admin login (default eslam@teknulugy.com)
 #   PORT=4100                 internal port for the API (default 4100)
 #   MYSQL_ROOT_PASSWORD=...   only if MySQL/MariaDB root needs a password
-#   INCLUDE_APEX=1            also serve the bare domain (without www) as the website
+#   INCLUDE_APEX=0            don't answer on the bare domain (default: it redirects to www.)
 #   SKIP_SSL=1                skip Let's Encrypt (e.g. DNS not ready yet)
 set -euo pipefail
 
@@ -40,7 +40,7 @@ command -v nginx >/dev/null || die "Nginx is not installed. This script expects 
 [ -d "$SRC/api" ] && [ -d "$SRC/admin" ] && [ -d "$SRC/web" ] || die "Run this from the extracted wappflow-deploy folder."
 
 DOMAINS=("$WEB_DOMAIN" "$ADMIN_DOMAIN" "$API_DOMAIN")
-[ "${INCLUDE_APEX:-0}" = 1 ] && DOMAINS+=("$APEX_DOMAIN")
+[ "${INCLUDE_APEX:-1}" = 1 ] && DOMAINS+=("$APEX_DOMAIN")
 
 # Where this Nginx keeps site configs
 if [ -d /etc/nginx/sites-available ] && grep -q "sites-enabled" /etc/nginx/nginx.conf; then
@@ -55,6 +55,10 @@ ngx_file() { echo "$NGX_AVAIL/wappflow-$1.conf"; }
 c_info "Checking that nothing else on this server already uses these domains"
 for d in "${DOMAINS[@]}"; do
   hits=$(grep -rlE "server_name[^;]*[[:space:]]${d//./\\.}([[:space:];]|$)" /etc/nginx/ 2>/dev/null | grep -v '/wappflow-' || true)
+  if [ -n "$hits" ] && [ "$d" = "$APEX_DOMAIN" ]; then
+    c_warn "$d is already used by another site ($hits); leaving it alone"; INCLUDE_APEX=0
+    DOMAINS=("$WEB_DOMAIN" "$ADMIN_DOMAIN" "$API_DOMAIN"); continue
+  fi
   if [ -n "$hits" ]; then
     die "$d is already configured in: $hits
    Remove or rename that site first (or tell me and I'll adapt). Nothing was changed."
@@ -229,7 +233,7 @@ for f in "$NGX_AVAIL"/wappflow-*.conf; do
   fi
 done
 c_info "Writing Nginx sites"
-WEB_NAMES="$WEB_DOMAIN"; [ "${INCLUDE_APEX:-0}" = 1 ] && WEB_NAMES="$WEB_DOMAIN $APEX_DOMAIN"
+WEB_NAMES="$WEB_DOMAIN"
 write_site() { # name, content — keeps SSL lines certbot added earlier
   local f; f=$(ngx_file "$1")
   if [ -f "$f" ] && grep -q "managed by Certbot" "$f"; then c_ok "$(basename "$f") already has SSL; left as is"; return; fi
@@ -253,6 +257,15 @@ write_site web "server {
     location /assets/ { expires 30d; add_header Cache-Control \"public, immutable\"; }
     location / { try_files \$uri \$uri/ /index.html; }
 }"
+
+# bare domain (wappflow.online) → https://www.wappflow.online
+if [ "${INCLUDE_APEX:-1}" = 1 ]; then
+  write_site apex "server {
+    listen 80;
+    server_name $APEX_DOMAIN;
+    location / { return 301 https://$WEB_DOMAIN\$request_uri; }
+}"
+fi
 
 write_site admin "server {
     listen 80;
