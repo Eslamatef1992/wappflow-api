@@ -6,12 +6,13 @@
 # Afterwards:  sudo wappflow-update
 #
 # Options (environment variables):
-#   DOMAIN=tekmessage.space      the www./admin./back. domain
+#   DOMAIN=wappflow.online       the www./admin./back. domain (remembered in /etc/wappflow-domain)
 #   BRANCH=main                  branch to deploy
 #   REPO_BASE=https://github.com/Eslamatef1992   where the three repos live
 set -euo pipefail
 
-DOMAIN="${DOMAIN:-tekmessage.space}"
+DOMAIN="${DOMAIN:-$(cat /etc/wappflow-domain 2>/dev/null || true)}"
+DOMAIN="${DOMAIN:-wappflow.online}"
 BRANCH="${BRANCH:-main}"
 REPO_BASE="${REPO_BASE:-https://github.com/Eslamatef1992}"
 SRC_DIR="${SRC_DIR:-/opt/wappflow-src}"
@@ -28,6 +29,7 @@ if [ "${1:-}" = "--install" ]; then
   ok "Installed the command: wappflow-update"
 fi
 
+echo "$DOMAIN" > /etc/wappflow-domain
 mkdir -p "$SRC_DIR"
 for repo in wappflow-api wappflow-admin wappflow-web; do
   dir="$SRC_DIR/$repo"
@@ -59,5 +61,8 @@ git -C "$SRC_DIR/wappflow-api" archive "$BRANCH" | tar -x -C "$PKG/api"
 cp -r "$SRC_DIR/wappflow-admin/dist" "$PKG/admin"
 cp -r "$SRC_DIR/wappflow-web/dist" "$PKG/web"
 cp "$PKG/api/deploy/install.sh" "$PKG/install.sh"
+
+# keep this command up to date with the version in the repo
+install -m 755 "$SRC_DIR/wappflow-api/deploy/update-from-github.sh" /usr/local/bin/wappflow-update 2>/dev/null || true
 
 DOMAIN="$DOMAIN" bash "$PKG/install.sh"

@@ -4,7 +4,7 @@
 #   www.<DOMAIN>    → public website       (static files)
 #   admin.<DOMAIN>  → dashboard + admin     (static files, /api and /socket.io proxied to the API)
 #   back.<DOMAIN>   → API, Meta webhooks, public REST API
-# DOMAIN defaults to tekmessage.space. The website in web/ is built for that domain.
+# DOMAIN defaults to wappflow.online. The website in web/ is built for that domain.
 #
 # First run installs everything. Running it again with a newer package updates the code and keeps
 # your .env, database and admin login. It never edits or removes other Nginx sites; if a domain or
@@ -19,7 +19,7 @@
 #   SKIP_SSL=1                skip Let's Encrypt (e.g. DNS not ready yet)
 set -euo pipefail
 
-DOMAIN="${DOMAIN:-tekmessage.space}"
+DOMAIN="${DOMAIN:-wappflow.online}"
 WEB_DOMAIN="www.$DOMAIN"
 APEX_DOMAIN="$DOMAIN"
 ADMIN_DOMAIN="admin.$DOMAIN"
@@ -220,7 +220,12 @@ for f in "$NGX_AVAIL"/wappflow-*.conf; do
   [ -f "$f" ] || continue
   if ! grep -q "$ADMIN_DOMAIN\|$API_DOMAIN\|$WEB_DOMAIN" "$f"; then
     c_info "Removing old WappFlow site for another domain: $(basename "$f")"
+    OLD_NAMES=$(grep -hoE 'server_name[^;]+' "$f" | sed 's/server_name//' | tr ' ' '\n' | grep -v '^$' | sort -u)
     rm -f "$f"; if [ -n "$NGX_ENABLED" ]; then rm -f "$NGX_ENABLED/$(basename "$f")"; fi
+    # and its SSL certificates, so the old domain is fully gone
+    for n in $OLD_NAMES; do
+      if [ -d "/etc/letsencrypt/live/$n" ]; then certbot delete --non-interactive --cert-name "$n" >/dev/null 2>&1 && c_ok "Removed SSL certificate for $n" || true; fi
+    done
   fi
 done
 c_info "Writing Nginx sites"
