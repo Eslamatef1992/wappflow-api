@@ -39,17 +39,28 @@ test('choosing a plan during the trial never locks the workspace before the tria
   assert.equal((await call('GET', '/api/app/contacts')).status, 200);
 });
 
-test('when the trial / paid period ends unpaid, the workspace is locked at once except billing', async () => {
+test('no free trial: a new workspace can explore but not connect or send for real until it pays', async () => {
+  const me = (await call('GET', '/api/auth/me')).data;
+  assert.equal(me.preview, true);
+  // explore: contacts, templates, demo number all work
+  assert.equal((await call('GET', '/api/app/contacts')).status, 200);
+  assert.equal((await call('POST', '/api/app/numbers', { mode: 'mock' })).status, 201);
+  // go live: blocked with a clear message
+  const live = await call('POST', '/api/app/numbers', { phone_number_id: '123', waba_id: '456', access_token: 'x' });
+  assert.equal(live.status, 402);
+  assert.match(live.data.error, /Choose a plan and pay to connect your WhatsApp number/);
+  assert.equal((await call('POST', '/api/app/numbers/embedded-signup', { code: 'x' })).status, 402);
+  // even a live number added another way cannot send while unpaid
+  const { insert } = await import('../src/db.js');
+  const { sendToContact } = await import('../src/services/messaging.js');
+  const numberId = await insert('wa_numbers', { tenant_id: tenantId, label: 'Live', display_phone: '+965 1', phone_number_id: 'live-1', waba_id: 'w', mode: 'live', status: 'connected', created_at: Date.now() });
+  const contact = await db('contacts').where({ tenant_id: tenantId }).first();
+  await assert.rejects(sendToContact({ tenant: await tenant(), contact, numberId, message: { type: 'template', template: { name: 'x', language: { code: 'en' } } } }), /Choose a plan and pay to send real WhatsApp messages/);
+  await db('wa_numbers').where({ id: numberId }).del();
+  // the preview never expires or locks, even after its old trial date
   await db('subscriptions').where({ id: (await sub()).id }).update({ current_period_end: Date.now() - 1000 });
   await billing.runBillingCycle();
-  assert.equal((await tenant()).status, 'suspended');
-  assert.equal((await sub()).status, 'past_due');
-  const locked = await call('GET', '/api/app/contacts');
-  assert.equal(locked.status, 402);
-  assert.match(locked.data.error, /suspended/i);
-  const b = await call('GET', '/api/app/billing');
-  assert.equal(b.status, 200);
-  assert.ok(b.data.invoices.some((i) => i.status === 'unpaid'));
+  assert.equal((await tenant()).status, 'trial');
 });
 
 test('paying unlocks the workspace and starts a new period', async () => {

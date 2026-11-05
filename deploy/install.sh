@@ -163,7 +163,8 @@ META_APP_SECRET=
 META_VERIFY_TOKEN=$VERIFY
 META_ES_CONFIG_ID=
 
-TRIAL_DAYS=14
+# free trial days; 0 = no trial: new workspaces explore with a demo number and go live after paying
+TRIAL_DAYS=0
 # days a workspace keeps working after its plan ends unpaid (0 = locked until paid)
 GRACE_DAYS=0
 # PayPal (developer.paypal.com → Apps & Credentials). Leave empty to hide PayPal.
@@ -196,6 +197,7 @@ else
     printf '\n# PayPal (developer.paypal.com → Apps & Credentials). Leave empty to hide PayPal.\nPAYPAL_CLIENT_ID=\nPAYPAL_SECRET=\nPAYPAL_MODE=live\nPAYPAL_CURRENCY=USD\n# 1 KWD in PAYPAL_CURRENCY (PayPal cannot charge in KWD)\nPAYPAL_FX_RATE=3.26\n' >> "$ENV_FILE"
     c_ok "Added PayPal settings to $ENV_FILE (empty until you fill them in)"
   fi
+  if grep -q '^TRIAL_DAYS=14$' "$ENV_FILE"; then sed -i 's/^TRIAL_DAYS=14$/TRIAL_DAYS=0/' "$ENV_FILE"; c_ok "Free trial closed: new workspaces can explore but go live only after paying (TRIAL_DAYS=0)"; fi
   # old installs had a 5-day grace period; plans now lock as soon as they end unpaid
   if grep -q '^GRACE_DAYS=5$' "$ENV_FILE"; then sed -i 's/^GRACE_DAYS=5$/GRACE_DAYS=0/' "$ENV_FILE"; c_ok "Expired plans now lock the workspace until paid (GRACE_DAYS=0)"; fi
   # the old placeholder bank text

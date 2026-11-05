@@ -5,7 +5,7 @@ import { bad, render } from '../lib/util.js';
 import { publish } from '../lib/events.js';
 import { enqueue, registerJob } from '../lib/jobs.js';
 import { clientFor } from '../whatsapp/client.js';
-import { addUsage, assertLimit } from './billing.js';
+import { addUsage, assertLimit, assertPaid } from './billing.js';
 
 const WINDOW_MS = 24 * 60 * 60 * 1000;
 
@@ -125,6 +125,7 @@ export async function sendToContact({ tenant, contact, message, numberId, userId
   await assertLimit(tenant, 'monthly_messages', 1);
 
   const number = await getNumber(tenant.id, numberId);
+  if (number.mode === 'live') assertPaid(tenant, 'send real WhatsApp messages');
   const conv = await getOrCreateConversation(tenant.id, contact.id, number.id);
   const { _preview, ...payload } = message;
   const body = previewOf(message);

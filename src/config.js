@@ -69,7 +69,7 @@ export const config = {
     apiBase: env.TAP_API_BASE || 'https://api.tap.company/v2',
   },
   sendRatePerSecond: +(env.SEND_RATE_PER_SEC || 20),
-  trialDays: +(env.TRIAL_DAYS || 14),
+  trialDays: +(env.TRIAL_DAYS ?? 0), // 0 = no free trial: new workspaces can explore (demo number) but not go live until they pay
   graceDays: +(env.GRACE_DAYS ?? 0), // days a workspace keeps working after its plan ends unpaid
   allowSignup: env.ALLOW_SIGNUP !== 'false',
   mockStatusDelayMs: +(env.MOCK_STATUS_DELAY_MS || 1500),

@@ -4,7 +4,7 @@ import { config } from '../config.js';
 import { db, now, insert } from '../db.js';
 import { h, bad, required, slugify, HttpError } from '../lib/util.js';
 import { signToken, publicUser, requireAuth } from '../lib/auth.js';
-import { startTrial, planFor, usageFor, serializePlan, tapEnabled } from '../services/billing.js';
+import { startTrial, planFor, usageFor, serializePlan, tapEnabled, isPreview } from '../services/billing.js';
 import { paypalEnabled } from '../services/paypal.js';
 
 const r = Router();
@@ -54,6 +54,7 @@ r.get('/me', requireAuth, h(async (req, res) => {
     const plan = await planFor(req.tenant);
     const sub = await db('subscriptions').where({ tenant_id: req.tenant.id }).orderBy('id', 'desc').first();
     out.tenant = req.tenant;
+    out.preview = isPreview(req.tenant); // not paid yet: explore only, nothing real is connected or sent
     out.plan = plan.id ? serializePlan(plan) : null;
     out.subscription = sub || null;
     out.usage = await usageFor(req.tenant.id);

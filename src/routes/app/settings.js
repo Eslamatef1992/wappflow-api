@@ -4,7 +4,7 @@ import { config } from '../../config.js';
 import { db, j, s, now, insert } from '../../db.js';
 import { h, bad, notFound, required, encrypt, randomToken, sha256 } from '../../lib/util.js';
 import { requireRole, publicUser } from '../../lib/auth.js';
-import { assertLimit, assertFeature } from '../../services/billing.js';
+import { assertLimit, assertFeature, assertPaid } from '../../services/billing.js';
 import { clientFor, exchangeSignupCode, registerNumber, subscribeApp } from '../../whatsapp/client.js';
 
 const r = Router();
@@ -39,6 +39,7 @@ async function makeDefaultIfFirst(tenantId, id) {
 
 /** Connect manually with a permanent System User token from Meta Business Manager, or add a demo number. */
 r.post('/numbers', admins, h(async (req, res) => {
+  if (req.body.mode !== 'mock') assertPaid(req.tenant, 'connect your WhatsApp number');
   await assertLimit(req.tenant, 'numbers', 1);
   if (req.body.mode === 'mock') {
     const pid = `mock-${req.tenant.id}-${randomToken(6)}`;
@@ -67,6 +68,7 @@ r.post('/numbers', admins, h(async (req, res) => {
  * popup with META_APP_ID + META_ES_CONFIG_ID, then posts { code, phone_number_id, waba_id } here.
  */
 r.post('/numbers/embedded-signup', admins, h(async (req, res) => {
+  assertPaid(req.tenant, 'connect your WhatsApp number');
   required(req.body, ['code', 'phone_number_id', 'waba_id']);
   if (!config.meta.appId || !config.meta.appSecret) throw bad('Embedded Signup is not configured on this server');
   await assertLimit(req.tenant, 'numbers', 1);

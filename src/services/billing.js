@@ -71,9 +71,16 @@ const addInterval = (ts, interval) => {
   return d.getTime();
 };
 
+/** Preview: workspace not paid yet (no free trial). Everything can be explored with a demo number; nothing real is sent. */
+export const isPreview = (tenant) => config.trialDays <= 0 && tenant?.status === 'trial';
+
+export function assertPaid(tenant, what = 'do this') {
+  if (isPreview(tenant)) throw new HttpError(402, `Choose a plan and pay to ${what}. Until then you can explore everything with a demo number.`);
+}
+
 export async function startTrial(tenantId, planId, trx = db) {
   const t = now();
-  const end = t + config.trialDays * DAY;
+  const end = config.trialDays > 0 ? t + config.trialDays * DAY : null; // null: preview until the first payment
   await trx('tenants').where({ id: tenantId }).update({ status: 'trial', plan_id: planId, trial_ends_at: end });
   await insert('subscriptions', {
     tenant_id: tenantId, plan_id: planId, status: 'trialing', billing_interval: 'monthly',
@@ -185,7 +192,7 @@ export async function confirmTapCharge(chargeId) {
 export async function runBillingCycle() {
   const t = now();
   // 1) periods that ended → issue renewal invoice and move to past_due
-  const due = await db('subscriptions').whereIn('status', ['trialing', 'active']).andWhere('current_period_end', '<', t);
+  const due = await db('subscriptions').whereIn('status', config.trialDays > 0 ? ['trialing', 'active'] : ['active']).andWhere('current_period_end', '<', t);
   for (const sub of due) {
     const open = await db('invoices').where({ tenant_id: sub.tenant_id, status: 'unpaid' }).first();
     if (!open) await createInvoice({ tenantId: sub.tenant_id, planId: sub.plan_id, interval: sub.billing_interval, periodStart: sub.current_period_end });
@@ -202,6 +209,7 @@ export async function runBillingCycle() {
   const ids = [];
   for (const tid of new Set(overdue.map((o) => o.tenant_id))) {
     const sub = await db('subscriptions').where({ tenant_id: tid }).orderBy('id', 'desc').first();
+    if (config.trialDays <= 0 && sub?.status === 'trialing') continue; // preview workspaces have nothing to lock
     if (!sub || !sub.current_period_end || sub.current_period_end < t || sub.status === 'past_due') ids.push(tid);
   }
   if (ids.length) await db('tenants').whereIn('id', ids).whereNot('status', 'suspended').update({ status: 'suspended' });
