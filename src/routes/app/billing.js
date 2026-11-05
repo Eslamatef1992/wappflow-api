@@ -39,11 +39,15 @@ r.post('/billing/subscribe', requireRole('owner', 'admin'), h(async (req, res) =
   const plan = await db('plans').where({ id: req.body.planId, is_active: true }).first();
   if (!plan) throw notFound('Plan');
   const interval = req.body.interval === 'yearly' ? 'yearly' : 'monthly';
+  const quote = (inv) => ({ ...inv, paypalQuote: paypalEnabled() ? paypalAmount(inv) : null });
+  // same plan clicked again: reuse its open invoice instead of issuing a new one
+  const same = await db('invoices').where({ tenant_id: req.tenant.id, status: 'unpaid', plan_id: plan.id }).andWhere('notes', 'like', `%(${interval})%`).first();
+  if (same) return res.json(quote(same));
   await db('invoices').where({ tenant_id: req.tenant.id, status: 'unpaid' }).update({ status: 'void', notes: 'Replaced by a new plan selection' });
   const sub = await db('subscriptions').where({ tenant_id: req.tenant.id }).orderBy('id', 'desc').first();
   if (sub) await db('subscriptions').where({ id: sub.id }).update({ billing_interval: interval });
   const invoice = await createInvoice({ tenantId: req.tenant.id, planId: plan.id, interval, dueInDays: 3 });
-  res.status(201).json(invoice);
+  res.status(201).json(quote(invoice));
 }));
 
 r.post('/billing/invoices/:id/pay', requireRole('owner', 'admin'), h(async (req, res) => {

@@ -181,7 +181,8 @@ export async function confirmTapCharge(chargeId) {
 }
 
 // ---------------- Lifecycle job ----------------
-registerJob('billing.cycle', async () => {
+/** Renewals and lock-outs. Runs every few minutes as the billing.cycle job. */
+export async function runBillingCycle() {
   const t = now();
   // 1) periods that ended → issue renewal invoice and move to past_due
   const due = await db('subscriptions').whereIn('status', ['trialing', 'active']).andWhere('current_period_end', '<', t);
@@ -191,14 +192,24 @@ registerJob('billing.cycle', async () => {
     const fresh = await db('subscriptions').where({ id: sub.id }).first();
     if (fresh.current_period_end < t) {
       await db('subscriptions').where({ id: sub.id }).update({ status: 'past_due' });
-      await db('tenants').where({ id: sub.tenant_id }).whereNot('status', 'suspended').update({ status: 'past_due' });
+      // no grace period (GRACE_DAYS=0, the default): the workspace is locked until the renewal is paid
+      await db('tenants').where({ id: sub.tenant_id }).whereNot('status', 'suspended').update({ status: config.graceDays > 0 ? 'past_due' : 'suspended' });
     }
   }
   // 2) unpaid invoices past their due date → suspend the workspace
+  //    (only when the paid/trial period is also over: picking a new plan mid-period never locks anyone out early)
   const overdue = await db('invoices').where({ status: 'unpaid' }).andWhere('due_at', '<', t).select('tenant_id');
-  const ids = [...new Set(overdue.map((o) => o.tenant_id))];
+  const ids = [];
+  for (const tid of new Set(overdue.map((o) => o.tenant_id))) {
+    const sub = await db('subscriptions').where({ tenant_id: tid }).orderBy('id', 'desc').first();
+    if (!sub || !sub.current_period_end || sub.current_period_end < t || sub.status === 'past_due') ids.push(tid);
+  }
   if (ids.length) await db('tenants').whereIn('id', ids).whereNot('status', 'suspended').update({ status: 'suspended' });
-  return { retryInMs: 60 * 60_000 }; // run hourly
+}
+
+registerJob('billing.cycle', async () => {
+  await runBillingCycle();
+  return { retryInMs: 5 * 60_000 }; // every 5 minutes, so an expired plan locks promptly
 });
 
 export async function ensureBillingJob() {

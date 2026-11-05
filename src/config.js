@@ -70,7 +70,7 @@ export const config = {
   },
   sendRatePerSecond: +(env.SEND_RATE_PER_SEC || 20),
   trialDays: +(env.TRIAL_DAYS || 14),
-  graceDays: +(env.GRACE_DAYS || 5),
+  graceDays: +(env.GRACE_DAYS ?? 0), // days a workspace keeps working after its plan ends unpaid
   allowSignup: env.ALLOW_SIGNUP !== 'false',
   mockStatusDelayMs: +(env.MOCK_STATUS_DELAY_MS || 1500),
 };
