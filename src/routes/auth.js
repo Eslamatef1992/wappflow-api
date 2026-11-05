@@ -57,6 +57,9 @@ r.get('/me', requireAuth, h(async (req, res) => {
     out.plan = plan.id ? serializePlan(plan) : null;
     out.subscription = sub || null;
     out.usage = await usageFor(req.tenant.id);
+    // 'live' | 'demo' | 'none': demo numbers only simulate sending, so the dashboard warns about it
+    const numbers = await db('wa_numbers').where({ tenant_id: req.tenant.id }).select('mode');
+    out.whatsapp = numbers.some((n) => n.mode === 'live') ? 'live' : numbers.length ? 'demo' : 'none';
   }
   res.json(out);
 }));
