@@ -1,6 +1,6 @@
 # WappFlow Backend — WhatsApp Business Platform API
 
-> Backend of the WappFlow platform. The dashboard (customer app + super-admin panel) lives in **[wappflow-admin](https://github.com/Eslamatef1992/wappflow-admin)**.
+> Backend of the WappFlow platform. The dashboard (customer app + super-admin panel, English/Arabic) lives in **[wappflow-admin](https://github.com/Eslamatef1992/wappflow-admin)** and the public website in **[wappflow-web](https://github.com/Eslamatef1992/wappflow-web)**.
 
 A complete platform you can sell to businesses on a monthly plan: each customer gets their own workspace
 with a shared WhatsApp team inbox, broadcast campaigns, a visual chatbot builder, store/order automations
@@ -86,6 +86,8 @@ npm run seed                                       # plans + your super admin (n
 pm2 start deploy/ecosystem.config.cjs && pm2 save  # API also serves ../wappflow-admin/dist (or set WEB_DIST)
 sudo cp deploy/nginx.conf /etc/nginx/sites-available/wappflow   # edit server_name, enable, then certbot
 ```
+
+Website: build **wappflow-web** with `VITE_APP_URL=https://app.your-domain npm run build` and host its `dist/` folder on your main domain (Nginx, CyberPanel, Netlify — any static host). Set `SITE_URL` in this repo's `.env` to that domain so the pricing section can load your plans.
 
 Updating later: `git pull` in both folders, `npm run build` in wappflow-admin, `pm2 restart wappflow`.
 

@@ -136,7 +136,7 @@ function planPayload(b) {
   const features = {};
   FEATURE_KEYS.forEach((k) => { features[k] = b.features?.[k] !== false; });
   return {
-    name: b.name, slug: b.slug ? slugify(b.slug) : slugify(b.name), description: b.description || null,
+    name: b.name, slug: b.slug ? slugify(b.slug) : slugify(b.name), description: b.description || null, description_ar: b.description_ar || null,
     price_monthly: +b.price_monthly || 0, price_yearly: +b.price_yearly || 0, currency: (b.currency || 'KWD').toUpperCase(),
     limits: s(limits), features: s(features), is_active: b.is_active !== false, sort: +b.sort || 0,
   };

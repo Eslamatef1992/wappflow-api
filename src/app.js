@@ -26,7 +26,7 @@ export function createApp() {
   const app = express();
   app.set('trust proxy', 1);
   app.use(helmet({ contentSecurityPolicy: false, crossOriginResourcePolicy: { policy: 'cross-origin' } }));
-  app.use(cors({ origin: config.env === 'production' ? config.appUrl : true, credentials: true }));
+  app.use(cors({ origin: config.env === 'production' ? [config.appUrl, ...config.siteUrls] : true, credentials: true }));
   // keep the raw body: webhook signatures (Meta, Shopify, WooCommerce) are computed over it
   app.use(express.json({ limit: '5mb', verify: (req, _res, buf) => { req.rawBody = buf; } }));
 

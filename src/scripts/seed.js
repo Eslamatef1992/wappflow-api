@@ -9,11 +9,11 @@ const demo = process.argv.includes('--demo');
 await db.migrate.latest({ directory: new URL('../migrations', import.meta.url).pathname, loadExtensions: ['.js'] });
 
 const PLANS = [
-  { name: 'Starter', slug: 'starter', price_monthly: 15, price_yearly: 150, sort: 1, description: 'For small shops getting started on WhatsApp',
+  { name: 'Starter', slug: 'starter', price_monthly: 15, price_yearly: 150, sort: 1, description: 'For small shops getting started on WhatsApp', description_ar: 'للمتاجر الصغيرة التي تبدأ على واتساب',
     limits: { contacts: 1000, monthly_messages: 2000, agents: 2, numbers: 1, flows: 2 }, features: { campaigns: true, inbox: true, flows: true, commerce: false, api: false } },
-  { name: 'Growth', slug: 'growth', price_monthly: 35, price_yearly: 350, sort: 2, description: 'Campaigns, chatbots and store automations',
+  { name: 'Growth', slug: 'growth', price_monthly: 35, price_yearly: 350, sort: 2, description: 'Campaigns, chatbots and store automations', description_ar: 'حملات وروبوتات محادثة وأتمتة للمتجر',
     limits: { contacts: 10000, monthly_messages: 20000, agents: 5, numbers: 2, flows: 10 }, features: { campaigns: true, inbox: true, flows: true, commerce: true, api: true } },
-  { name: 'Business', slug: 'business', price_monthly: 79, price_yearly: 790, sort: 3, description: 'Unlimited scale for busy teams',
+  { name: 'Business', slug: 'business', price_monthly: 79, price_yearly: 790, sort: 3, description: 'Unlimited scale for busy teams', description_ar: 'توسّع بلا حدود للفرق المزدحمة',
     limits: { contacts: -1, monthly_messages: 100000, agents: 20, numbers: 5, flows: -1 }, features: { campaigns: true, inbox: true, flows: true, commerce: true, api: true } },
 ];
 

@@ -40,6 +40,8 @@ export const config = {
   env: env.NODE_ENV || 'development',
   port: +(env.PORT || 4000),
   appUrl: env.APP_URL || 'http://localhost:5173', // dashboard
+  // public website(s) allowed to read plans for the pricing section (comma separated)
+  siteUrls: (env.SITE_URL || '').split(',').map((s) => s.trim().replace(/\/$/, '')).filter(Boolean),
   apiUrl: env.API_URL || 'http://localhost:4000', // public URL of this server (webhooks)
   brand: env.BRAND_NAME || 'WappFlow',
   jwtSecret: env.JWT_SECRET || 'dev-jwt-secret-change-me',
