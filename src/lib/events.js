@@ -34,8 +34,8 @@ registerJob('webhook.deliver', async ({ endpointId, event, data, at }) => {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'X-Wasla-Event': event,
-      'X-Wasla-Signature': `sha256=${hmacHex(ep.secret, body)}`,
+      'X-WappFlow-Event': event,
+      'X-WappFlow-Signature': `sha256=${hmacHex(ep.secret, body)}`,
     },
     body,
     signal: AbortSignal.timeout(10_000),

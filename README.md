@@ -1,6 +1,6 @@
-# Wasla Backend — WhatsApp Business Platform API
+# WappFlow Backend — WhatsApp Business Platform API
 
-> Backend of the Wasla platform. The dashboard (customer app + super-admin panel) lives in **[wappflow-admin](https://github.com/Eslamatef1992/wappflow-admin)**.
+> Backend of the WappFlow platform. The dashboard (customer app + super-admin panel) lives in **[wappflow-admin](https://github.com/Eslamatef1992/wappflow-admin)**.
 
 A complete platform you can sell to businesses on a monthly plan: each customer gets their own workspace
 with a shared WhatsApp team inbox, broadcast campaigns, a visual chatbot builder, store/order automations
@@ -59,7 +59,7 @@ cd ../wappflow-admin && npm install && npm run dev   # dashboard on http://local
 
 | Login | Email | Password |
 |---|---|---|
-| Super admin | admin@wasla.local | admin12345 |
+| Super admin | admin@wappflow.local | admin12345 |
 | Workspace owner | owner@demo.local | demo12345 |
 | Agent | agent@demo.local | demo12345 |
 
@@ -84,10 +84,10 @@ cd ../wappflow-api && npm ci
 cp .env.example .env                               # fill it in — see comments in the file
 npm run seed                                       # plans + your super admin (no demo data)
 pm2 start deploy/ecosystem.config.cjs && pm2 save  # API also serves ../wappflow-admin/dist (or set WEB_DIST)
-sudo cp deploy/nginx.conf /etc/nginx/sites-available/wasla   # edit server_name, enable, then certbot
+sudo cp deploy/nginx.conf /etc/nginx/sites-available/wappflow   # edit server_name, enable, then certbot
 ```
 
-Updating later: `git pull` in both folders, `npm run build` in wappflow-admin, `pm2 restart wasla`.
+Updating later: `git pull` in both folders, `npm run build` in wappflow-admin, `pm2 restart wappflow`.
 
 Migrations run automatically on start. Background work (webhook processing, campaign sending, chatbot delays,
 billing cycle, outgoing webhooks) uses a database-backed queue — **no Redis needed**. Run one process with the
@@ -131,7 +131,7 @@ POST /api/v1/orders        {"id":"A-1001","phone":"+965…","name":"Huda","total
 PATCH /api/v1/orders/:id   {"status":"shipped","meta":{"tracking_url":"https://…"}}
 ```
 
-Outgoing webhooks are signed: `X-Wasla-Signature: sha256=HMAC_SHA256(secret, rawBody)`.
+Outgoing webhooks are signed: `X-WappFlow-Signature: sha256=HMAC_SHA256(secret, rawBody)`.
 Events: `message.received`, `message.sent`, `message.status`, `contact.created`, `conversation.updated`,
 `campaign.updated`, `order.created|paid|shipped|delivered|canceled`.
 

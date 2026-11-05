@@ -28,5 +28,5 @@
   "engines": {
     "node": ">=20"
   },
-  "description": "Wasla WhatsApp Business platform — API, WhatsApp Cloud API integration, job queue"
+  "description": "WappFlow WhatsApp Business platform — API, WhatsApp Cloud API integration, job queue"
 }

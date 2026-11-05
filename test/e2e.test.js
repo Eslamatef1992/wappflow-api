@@ -7,7 +7,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 
-const dbFile = path.join(os.tmpdir(), `wasla-test-${Date.now()}.sqlite`);
+const dbFile = path.join(os.tmpdir(), `wappflow-test-${Date.now()}.sqlite`);
 process.env.DB_FILE = dbFile;
 process.env.MOCK_STATUS_DELAY_MS = '1';
 process.env.SEND_RATE_PER_SEC = '50';
@@ -36,7 +36,7 @@ before(async () => {
   server = createApp().listen(0);
   base = `http://127.0.0.1:${server.address().port}`;
   owner = (await call('POST', '/api/auth/login', { email: 'owner@demo.local', password: 'demo12345' })).data.token;
-  admin = (await call('POST', '/api/auth/login', { email: 'admin@wasla.local', password: 'admin12345' })).data.token;
+  admin = (await call('POST', '/api/auth/login', { email: 'admin@wappflow.local', password: 'admin12345' })).data.token;
   assert.ok(owner && admin);
 });
 after(async () => { server.close(); await db.destroy(); fs.rmSync(dbFile, { force: true }); });
@@ -152,7 +152,7 @@ test('public API + order automation + Shopify webhook', async () => {
 });
 
 test('Meta webhook verify + inbound + status receipt', async () => {
-  let r = await call('GET', '/webhooks/whatsapp?hub.mode=subscribe&hub.verify_token=wasla-verify-token&hub.challenge=42');
+  let r = await call('GET', '/webhooks/whatsapp?hub.mode=subscribe&hub.verify_token=wappflow-verify-token&hub.challenge=42');
   assert.equal(r.data, 42);
   const number = await db('wa_numbers').first();
   const payload = { object: 'whatsapp_business_account', entry: [{ id: 'x', changes: [{ field: 'messages', value: {

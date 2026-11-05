@@ -10,7 +10,7 @@ function dbConfig() {
   if (client === 'better-sqlite3') {
     return {
       client,
-      connection: { filename: env.DB_FILE || path.join(root, 'data', 'wasla.sqlite') },
+      connection: { filename: env.DB_FILE || path.join(root, 'data', 'wappflow.sqlite') },
       useNullAsDefault: true,
       pool: {
         afterCreate: (conn, cb) => {
@@ -28,7 +28,7 @@ function dbConfig() {
       port: +(env.DB_PORT || (client === 'pg' ? 5432 : 3306)),
       user: env.DB_USER,
       password: env.DB_PASSWORD,
-      database: env.DB_NAME || 'wasla',
+      database: env.DB_NAME || 'wappflow',
       ...(client === 'mysql2' ? { charset: 'utf8mb4' } : {}),
     },
     pool: { min: 2, max: 20 },
@@ -41,7 +41,7 @@ export const config = {
   port: +(env.PORT || 4000),
   appUrl: env.APP_URL || 'http://localhost:5173', // dashboard
   apiUrl: env.API_URL || 'http://localhost:4000', // public URL of this server (webhooks)
-  brand: env.BRAND_NAME || 'Wasla',
+  brand: env.BRAND_NAME || 'WappFlow',
   jwtSecret: env.JWT_SECRET || 'dev-jwt-secret-change-me',
   appKey: env.APP_KEY || 'dev-app-key-change-me',
   db: dbConfig(),
@@ -49,7 +49,7 @@ export const config = {
     graphVersion: env.META_GRAPH_VERSION || 'v23.0',
     appId: env.META_APP_ID || '',
     appSecret: env.META_APP_SECRET || '', // verifies X-Hub-Signature-256 on webhooks
-    verifyToken: env.META_VERIFY_TOKEN || 'wasla-verify-token',
+    verifyToken: env.META_VERIFY_TOKEN || 'wappflow-verify-token',
     embeddedSignupConfigId: env.META_ES_CONFIG_ID || '',
   },
   tap: {

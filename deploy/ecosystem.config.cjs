@@ -2,7 +2,7 @@
 module.exports = {
   apps: [
     {
-      name: 'wasla',
+      name: 'wappflow',
       cwd: __dirname + '/..',
       script: 'src/index.js',
       instances: 1, // the background worker runs here; scale extra API instances with WORKER=false

@@ -24,7 +24,7 @@ for (const p of PLANS) {
   }
 }
 
-const adminEmail = (process.env.ADMIN_EMAIL || 'admin@wasla.local').toLowerCase();
+const adminEmail = (process.env.ADMIN_EMAIL || 'admin@wappflow.local').toLowerCase();
 const adminPassword = process.env.ADMIN_PASSWORD || 'admin12345';
 if (!(await db('users').where({ email: adminEmail }).first())) {
   await insert('users', { tenant_id: null, name: 'Platform Admin', email: adminEmail, role: 'superadmin', is_active: true, password_hash: await bcrypt.hash(adminPassword, 10), created_at: now() });
