@@ -21,6 +21,8 @@ import commerce from './routes/app/commerce.js';
 import settings from './routes/app/settings.js';
 import billing from './routes/app/billing.js';
 import analytics from './routes/app/analytics.js';
+import invoices from './routes/app/invoices.js';
+import invoicePage from './routes/invoicePage.js';
 
 export function createApp() {
   const app = express();
@@ -38,12 +40,13 @@ export function createApp() {
   app.use('/api/admin', adminRoutes);
   app.use('/api/v1', rateLimit({ windowMs: 60_000, limit: 600 }), publicApi);
   app.use(webhookRoutes);
+  app.use(invoicePage); // public invoice links sent on WhatsApp: /i/<token>
 
   const tenantApp = express.Router();
   tenantApp.use(requireAuth);
   tenantApp.use(requireTenant({ allowSuspended: true }), billing); // billing stays reachable while suspended
   tenantApp.use(requireTenant());
-  for (const r of [analytics, contacts, inbox, templates, campaigns, flows, commerce, settings]) tenantApp.use(r);
+  for (const r of [analytics, contacts, inbox, templates, campaigns, flows, commerce, invoices, settings]) tenantApp.use(r);
   app.use('/api/app', tenantApp);
 
   // serve the built admin dashboard from the same server in production.
@@ -53,7 +56,7 @@ export function createApp() {
     : [path.join(config.root, '..', 'wappflow-admin', 'dist'), path.join(config.root, '..', 'web', 'dist')].find((d) => fs.existsSync(d));
   if (dist && fs.existsSync(dist)) {
     app.use(express.static(dist, { maxAge: '7d', index: false }));
-    app.get(/^\/(?!api|webhooks|hooks|socket\.io).*/, (_req, res) => res.sendFile(path.join(dist, 'index.html')));
+    app.get(/^\/(?!api|webhooks|hooks|socket\.io|i\/).*/, (_req, res) => res.sendFile(path.join(dist, 'index.html')));
   }
 
   app.use((req, _res, next) => next(new HttpError(404, `Not found: ${req.method} ${req.path}`)));

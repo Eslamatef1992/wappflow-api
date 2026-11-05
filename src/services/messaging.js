@@ -76,7 +76,8 @@ export function buildTemplateMessage(template, variables = {}, ctx = {}) {
       out.push({ type: 'header', parameters: (variables.header || []).map((p) => ({ type: 'text', text: String(resolveParam(p, ctx) || '-') })) });
     } else if (['IMAGE', 'VIDEO', 'DOCUMENT'].includes(header.format)) {
       const kind = header.format.toLowerCase();
-      const link = variables.headerMedia || header.example?.header_handle?.[0];
+      // the link may use fields, e.g. {{invoice.pdf_url}}; invoices fall back to their own PDF link
+      const link = render(variables.headerMedia || '', ctx) || (kind === 'document' && ctx.invoice?.pdf_url) || header.example?.header_handle?.[0];
       if (!link) throw bad(`Template "${template.name}" needs a header ${kind} URL`);
       out.push({ type: 'header', parameters: [{ type: kind, [kind]: { link } }] });
     }

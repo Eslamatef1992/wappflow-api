@@ -23,7 +23,7 @@ const fake = http.createServer((req, res) => {
     if (req.method === 'POST' && url.pathname === '/v2/checkout/orders') {
       const b = JSON.parse(body);
       const id = `ORDER${++seq}`;
-      orders.set(id, { id, status: 'PAYER_ACTION_REQUIRED', purchase_units: b.purchase_units });
+      orders.set(id, { id, status: 'PAYER_ACTION_REQUIRED', purchase_units: b.purchase_units, _ctx: b.payment_source?.paypal?.experience_context });
       return send(201, { id, status: 'PAYER_ACTION_REQUIRED', links: [{ rel: 'payer-action', href: `https://paypal.test/checkoutnow?token=${id}` }] });
     }
     const m = url.pathname.match(/^\/v2\/checkout\/orders\/([^/]+)(\/capture)?$/);
@@ -165,4 +165,27 @@ test('fake or tampered payments are rejected', async () => {
   assert.match(ret.location, /payment=pending/);
   const still = (await call('GET', '/api/app/billing')).data.invoices.find((i) => i.id === inv.id);
   assert.equal(still.status, 'unpaid');
+});
+
+test('Visa / Mastercard opens PayPal guest card checkout and pays the same way', async () => {
+  const b0 = (await call('GET', '/api/app/billing')).data;
+  assert.equal(b0.paymentMethods.card, true);
+  const inv = await newInvoice();
+  const pay = await call('POST', `/api/app/billing/invoices/${inv.id}/pay`, { method: 'card' });
+  assert.equal(pay.status, 200, JSON.stringify(pay.data));
+  const orderId = new URL(pay.data.url).searchParams.get('token');
+  assert.equal(orders.get(orderId)._ctx.landing_page, 'GUEST_CHECKOUT');
+  const viaPaypal = await call('POST', `/api/app/billing/invoices/${inv.id}/pay`, { method: 'paypal' });
+  assert.equal(orders.get(new URL(viaPaypal.data.url).searchParams.get('token'))._ctx.landing_page, 'LOGIN');
+  approve(new URL(viaPaypal.data.url).searchParams.get('token'));
+  await call('GET', `/api/billing/paypal/return?token=${new URL(viaPaypal.data.url).searchParams.get('token')}`, null, null);
+  assert.equal((await call('GET', '/api/app/billing')).data.invoices.find((i) => i.id === inv.id).status, 'paid');
+});
+
+test('installer placeholder for bank details is never shown to customers', async () => {
+  process.env.BANK_DETAILS = 'Bank transfer details: edit BANK_DETAILS in /var/www/wappflow/api/.env';
+  assert.equal((await call('GET', '/api/app/billing')).data.bankDetails, null);
+  process.env.BANK_DETAILS = 'Boubyan Bank · IBAN KW12 BBYN 0000 1234';
+  assert.equal((await call('GET', '/api/app/billing')).data.bankDetails, 'Boubyan Bank · IBAN KW12 BBYN 0000 1234');
+  delete process.env.BANK_DETAILS;
 });

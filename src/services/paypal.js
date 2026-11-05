@@ -56,7 +56,7 @@ async function paypal(method, path, body, headers = {}) {
 }
 
 /** Create a PayPal order for an unpaid invoice and return the approval URL for the customer. */
-export async function createPaypalOrder(invoice, tenant) {
+export async function createPaypalOrder(invoice, tenant, { card = false } = {}) {
   if (!paypalEnabled()) throw bad('PayPal is not configured on this server.');
   if (invoice.status !== 'unpaid') throw bad(`Invoice is ${invoice.status}`);
   const amount = paypalAmount(invoice);
@@ -73,6 +73,8 @@ export async function createPaypalOrder(invoice, tenant) {
         experience_context: {
           brand_name: config.brand.slice(0, 127),
           user_action: 'PAY_NOW',
+          // card: open PayPal's guest card form (Visa/Mastercard) instead of the PayPal login
+          landing_page: card ? 'GUEST_CHECKOUT' : 'LOGIN',
           shipping_preference: 'NO_SHIPPING',
           return_url: `${config.apiUrl}/api/billing/paypal/return`,
           cancel_url: `${config.appUrl}/app/billing?payment=canceled`,

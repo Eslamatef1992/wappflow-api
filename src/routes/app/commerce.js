@@ -66,7 +66,7 @@ r.patch('/orders/:id', h(async (req, res) => {
 // ---------- automations (order event → template) ----------
 const automation = (a) => a && { ...a, variables: j(a.variables, {}), is_active: !!a.is_active };
 r.get('/automations', h(async (req, res) => {
-  const rows = await db('automations as a').leftJoin('templates as t', 't.id', 'a.template_id').where('a.tenant_id', req.tenant.id).select('a.*', 't.name as template_name');
+  const rows = await db('automations as a').leftJoin('templates as t', 't.id', 'a.template_id').where('a.tenant_id', req.tenant.id).whereIn('a.event', ORDER_EVENTS).select('a.*', 't.name as template_name');
   res.json({ events: ORDER_EVENTS, data: rows.map(automation) });
 }));
 r.post('/automations', h(async (req, res) => {

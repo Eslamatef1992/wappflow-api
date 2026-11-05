@@ -6,6 +6,7 @@ import { requireApiKey } from '../lib/auth.js';
 import { assertFeature, assertLimit } from '../services/billing.js';
 import { sendToContact, buildTemplateMessage, contactCtx } from '../services/messaging.js';
 import { upsertContact, serializeContact, createOrUpdateOrder, setOrderStatus } from '../services/commerce.js';
+import { createSalesInvoice, sendInvoice, setInvoiceStatus, findInvoice, serializeInvoice, withDelivery } from '../services/invoices.js';
 
 const r = Router();
 r.use(requireApiKey, h(async (req, _res, next) => { await assertFeature(req.tenant, 'api'); next(); }));
@@ -94,6 +95,43 @@ r.patch('/orders/:id', h(async (req, res) => {
   if (!o) throw notFound('Order');
   if (!['created', 'paid', 'shipped', 'delivered', 'canceled'].includes(req.body.status)) throw bad('Invalid status');
   res.json(await setOrderStatus(req.tenant, o, req.body.status, req.body.meta || {}));
+}));
+
+// ---------- invoices ----------
+const invoiceFeature = h(async (req, _res, next) => { await assertFeature(req.tenant, 'invoices'); next(); });
+const invoiceOut = async (inv, delivery) => {
+  const [row] = await withDelivery([inv]);
+  const { token, ...out } = serializeInvoice(row);
+  return { ...out, ...(delivery !== undefined ? { whatsapp: delivery } : {}) };
+};
+
+/**
+ * POST /api/v1/invoices — create an invoice and send it to the customer on WhatsApp.
+ *  { "number": "INV-1042", "phone": "+96550000000", "name": "Ahmad", "total": 12.5, "currency": "KWD",
+ *    "items": [{ "name": "Coffee", "quantity": 2, "price": 1.75 }], "due_date": "2026-11-30",
+ *    "pdf_url": "https://…/INV-1042.pdf", "pay_url": "https://…" }
+ * Sending the same number again returns the existing invoice (safe to retry); add "resend": true to send it again.
+ */
+r.post('/invoices', invoiceFeature, h(async (req, res) => {
+  const { invoice, created, delivery } = await createSalesInvoice(req.tenant, req.body || {}, { source: 'api' });
+  res.status(created ? 201 : 200).json(await invoiceOut(invoice, delivery));
+}));
+
+r.get('/invoices/:number', invoiceFeature, h(async (req, res) => {
+  res.json(await invoiceOut(await findInvoice(req.tenant.id, { number: req.params.number })));
+}));
+
+/** PATCH /api/v1/invoices/:number { "status": "paid" | "void" | "unpaid" } */
+r.patch('/invoices/:number', invoiceFeature, h(async (req, res) => {
+  const inv = await findInvoice(req.tenant.id, { number: req.params.number });
+  const { invoice, delivery } = await setInvoiceStatus(req.tenant, inv, req.body?.status);
+  res.json(await invoiceOut(invoice, delivery));
+}));
+
+r.post('/invoices/:number/send', invoiceFeature, h(async (req, res) => {
+  const inv = await findInvoice(req.tenant.id, { number: req.params.number });
+  const delivery = await sendInvoice(req.tenant, inv, req.body || {});
+  res.json(await invoiceOut(await findInvoice(req.tenant.id, { id: inv.id }), delivery));
 }));
 
 export default r;

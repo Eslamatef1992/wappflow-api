@@ -7,6 +7,12 @@ import { paypalEnabled, paypalAmount, createPaypalOrder, capturePaypalOrder } fr
 
 const r = Router();
 
+// the installer writes a placeholder; never show that to customers
+const bankDetails = () => {
+  const v = (process.env.BANK_DETAILS || '').trim();
+  return v && !/edit BANK_DETAILS|IBAN KW00 XXXX/i.test(v) ? v : null;
+};
+
 r.get('/billing', h(async (req, res) => {
   const plan = await planFor(req.tenant);
   res.json({
@@ -17,12 +23,13 @@ r.get('/billing', h(async (req, res) => {
     invoices: await db('invoices').where({ tenant_id: req.tenant.id }).orderBy('id', 'desc').limit(36),
     plans: (await db('plans').where({ is_active: true }).orderBy('sort')).map(serializePlan),
     onlinePayments: tapEnabled() || paypalEnabled(),
-    paymentMethods: { tap: tapEnabled(), paypal: paypalEnabled() },
+    // card = PayPal's guest checkout (Visa/Mastercard without a PayPal account)
+    paymentMethods: { tap: tapEnabled(), paypal: paypalEnabled(), card: paypalEnabled() },
     // what PayPal will charge for each unpaid invoice (PayPal has no KWD, so it is converted)
     paypalQuotes: paypalEnabled()
       ? Object.fromEntries((await db('invoices').where({ tenant_id: req.tenant.id, status: 'unpaid' })).map((i) => [i.id, paypalAmount(i)]))
       : {},
-    bankDetails: process.env.BANK_DETAILS || null,
+    bankDetails: bankDetails(),
   });
 }));
 
@@ -44,8 +51,8 @@ r.post('/billing/invoices/:id/pay', requireRole('owner', 'admin'), h(async (req,
   if (!inv) throw notFound('Invoice');
   if (inv.status !== 'unpaid') throw bad(`Invoice is ${inv.status}`);
   const method = req.body?.method || (paypalEnabled() && !tapEnabled() ? 'paypal' : 'tap');
-  if (method === 'paypal') {
-    const { url } = await createPaypalOrder(inv, req.tenant);
+  if (method === 'paypal' || method === 'card') {
+    const { url } = await createPaypalOrder(inv, req.tenant, { card: method === 'card' });
     return res.json({ url });
   }
   res.json({ url: await createTapCharge(inv, req.tenant, req.user) });
