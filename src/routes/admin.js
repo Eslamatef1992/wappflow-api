@@ -117,7 +117,21 @@ r.delete('/tenants/:id', h(async (req, res) => {
   const t = await db('tenants').where({ id: req.params.id }).first();
   if (!t) throw notFound('Tenant');
   if (req.body?.confirm !== t.slug) throw bad(`Type the workspace slug "${t.slug}" to confirm`);
-  await db('tenants').where({ id: t.id }).del();
+  // delete everything that belongs to the workspace explicitly (children first), so it works the same on every database
+  await db.transaction(async (trx) => {
+    const tid = t.id;
+    const ids = (table) => trx(table).where({ tenant_id: tid }).select('id');
+    await trx('messages').where({ tenant_id: tid }).del();
+    await trx('conversations').where({ tenant_id: tid }).del();
+    await trx('campaign_recipients').whereIn('campaign_id', ids('campaigns')).del();
+    await trx('contact_tags').whereIn('contact_id', ids('contacts')).del();
+    for (const table of ['campaigns', 'sales_invoices', 'orders', 'automations', 'integrations', 'products', 'flows', 'templates',
+      'quick_replies', 'tags', 'contacts', 'api_keys', 'webhook_endpoints', 'wa_numbers', 'usage_counters', 'invoices', 'subscriptions', 'users']) {
+      if (await trx.schema.hasTable(table)) await trx(table).where({ tenant_id: tid }).del();
+    }
+    await trx('tenants').where({ id: tid }).del();
+  });
+  await insert('audit_logs', { user_id: req.user.id, tenant_id: null, action: 'tenant.delete', meta: s({ id: t.id, name: t.name, slug: t.slug }), created_at: now() });
   res.json({ ok: true });
 }));
 

@@ -133,3 +133,21 @@ test('validation and API key required', async () => {
   assert.equal((await call('POST', '/api/v1/invoices', { number: 'X', phone: '+96551110001' }, {})).status, 401);
   assert.equal((await api('GET', '/api/v1/invoices/NOPE')).status, 404);
 });
+
+test('super admin can delete a workspace and everything in it', async () => {
+  const admin = (await (await fetch(`${base}/api/auth/login`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: 'admin@wappflow.local', password: 'admin12345' }) })).json()).token;
+  const A = { Authorization: `Bearer ${admin}` };
+  const me = (await call('GET', '/api/auth/me')).data;
+  const tid = me.tenant.id;
+  assert.ok(+(await db('contacts').where({ tenant_id: tid }).count({ c: '*' }).first()).c > 0);
+  assert.equal((await call('DELETE', `/api/admin/tenants/${tid}`, { confirm: 'wrong' }, A)).status, 400);
+  const ok = await call('DELETE', `/api/admin/tenants/${tid}`, { confirm: me.tenant.slug }, A);
+  assert.equal(ok.status, 200, JSON.stringify(ok.data));
+  for (const table of ['tenants', 'users', 'contacts', 'messages', 'conversations', 'sales_invoices', 'templates', 'wa_numbers', 'api_keys', 'automations']) {
+    const where = table === 'tenants' ? { id: tid } : { tenant_id: tid };
+    assert.equal(+(await db(table).where(where).count({ c: '*' }).first()).c, 0, table);
+  }
+  // the owner can no longer log in, and the API key stops working
+  assert.equal((await fetch(`${base}/api/auth/login`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: 'owner@demo.local', password: 'demo12345' }) })).status, 401);
+  assert.equal((await api('GET', '/api/v1/invoices/POS-1')).status, 401);
+});
