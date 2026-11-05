@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # WappFlow installer / updater for an Ubuntu server that already runs Nginx.
 #
-#   www.cloudliftsolution.com    → public website       (static files)
-#   admin.cloudliftsolution.com  → dashboard + admin     (static files, /api and /socket.io proxied to the API)
-#   back.cloudliftsolution.com   → API, Meta webhooks, public REST API
+#   www.<DOMAIN>    → public website       (static files)
+#   admin.<DOMAIN>  → dashboard + admin     (static files, /api and /socket.io proxied to the API)
+#   back.<DOMAIN>   → API, Meta webhooks, public REST API
+# DOMAIN defaults to tekmessage.space. The website in web/ is built for that domain.
 #
 # First run installs everything. Running it again with a newer package updates the code and keeps
 # your .env, database and admin login. It never edits or removes other Nginx sites; if a domain or
@@ -14,14 +15,15 @@
 #   ADMIN_EMAIL=you@x.com     super-admin login (default eslam@teknulugy.com)
 #   PORT=4100                 internal port for the API (default 4100)
 #   MYSQL_ROOT_PASSWORD=...   only if MySQL/MariaDB root needs a password
-#   INCLUDE_APEX=1            also serve cloudliftsolution.com (without www) as the website
+#   INCLUDE_APEX=1            also serve the bare domain (without www) as the website
 #   SKIP_SSL=1                skip Let's Encrypt (e.g. DNS not ready yet)
 set -euo pipefail
 
-WEB_DOMAIN="www.cloudliftsolution.com"
-APEX_DOMAIN="cloudliftsolution.com"
-ADMIN_DOMAIN="admin.cloudliftsolution.com"
-API_DOMAIN="back.cloudliftsolution.com"
+DOMAIN="${DOMAIN:-tekmessage.space}"
+WEB_DOMAIN="www.$DOMAIN"
+APEX_DOMAIN="$DOMAIN"
+ADMIN_DOMAIN="admin.$DOMAIN"
+API_DOMAIN="back.$DOMAIN"
 APP_DIR="/var/www/wappflow"
 PORT="${PORT:-4100}"
 ADMIN_EMAIL="${ADMIN_EMAIL:-eslam@teknulugy.com}"
@@ -47,6 +49,7 @@ else
   NGX_AVAIL=/etc/nginx/conf.d; NGX_ENABLED=""
 fi
 ngx_file() { echo "$NGX_AVAIL/wappflow-$1.conf"; }
+
 
 # ---------------------------------------------------------------- 1. safety checks
 c_info "Checking that nothing else on this server already uses these domains"
@@ -175,7 +178,9 @@ EOF
   chmod 600 "$LOGIN_FILE"
   c_ok "Database 'wappflow' ready, plans and super admin created"
 else
-  c_ok "Keeping existing configuration ($ENV_FILE)"
+  sed -i "s#^APP_URL=.*#APP_URL=https://$ADMIN_DOMAIN#; s#^API_URL=.*#API_URL=https://$API_DOMAIN#; s#^SITE_URL=.*#SITE_URL=https://$WEB_DOMAIN,https://$APEX_DOMAIN#" "$ENV_FILE"
+  if [ -f "$LOGIN_FILE" ]; then sed -i "s#^URL: .*#URL:      https://$ADMIN_DOMAIN/login#" "$LOGIN_FILE"; fi
+  c_ok "Keeping existing configuration ($ENV_FILE), addresses set to $DOMAIN"
 fi
 chown -R www-data:www-data "$APP_DIR/web" "$APP_DIR/admin" 2>/dev/null || true
 
@@ -194,6 +199,14 @@ curl -fs "http://127.0.0.1:$PORT/health" >/dev/null || { pm2 logs "$PM2_NAME" --
 c_ok "API running on 127.0.0.1:$PORT"
 
 # ---------------------------------------------------------------- 6. Nginx sites
+# Our own site files from an earlier install with a different domain are replaced (only wappflow-* files).
+for f in "$NGX_AVAIL"/wappflow-*.conf; do
+  [ -f "$f" ] || continue
+  if ! grep -q "$ADMIN_DOMAIN\|$API_DOMAIN\|$WEB_DOMAIN" "$f"; then
+    c_info "Removing old WappFlow site for another domain: $(basename "$f")"
+    rm -f "$f"; if [ -n "$NGX_ENABLED" ]; then rm -f "$NGX_ENABLED/$(basename "$f")"; fi
+  fi
+done
 c_info "Writing Nginx sites"
 WEB_NAMES="$WEB_DOMAIN"; [ "${INCLUDE_APEX:-0}" = 1 ] && WEB_NAMES="$WEB_DOMAIN $APEX_DOMAIN"
 write_site() { # name, content — keeps SSL lines certbot added earlier
@@ -253,15 +266,15 @@ if [ "${SKIP_SSL:-0}" != 1 ] && [ ${#SSL_DOMAINS[@]} -gt 0 ]; then
 fi
 
 # ---------------------------------------------------------------- 8. summary
-scheme=https; [ ${#SSL_DOMAINS[@]} -eq 0 ] && scheme=http
+url_for() { if [ -n "$(ls /etc/letsencrypt/live/"$1"/fullchain.pem 2>/dev/null)" ]; then echo "https://$1"; else echo "http://$1"; fi; }
 VERIFY_TOKEN=$(grep '^META_VERIFY_TOKEN=' "$ENV_FILE" | cut -d= -f2)
 echo
 echo "──────────────────────────── WappFlow is installed ────────────────────────────"
-echo " Website      $scheme://$WEB_DOMAIN"
-echo " Dashboard    $scheme://$ADMIN_DOMAIN"
-echo " API          $scheme://$API_DOMAIN/health"
+echo " Website      $(url_for "$WEB_DOMAIN")"
+echo " Dashboard    $(url_for "$ADMIN_DOMAIN")/login"
+echo " API          $(url_for "$API_DOMAIN")/health"
 echo
-[ -f "$LOGIN_FILE" ] && sed 's/^/ /' "$LOGIN_FILE" && echo "  (saved in $LOGIN_FILE — change the password after first login)" && echo
+if [ -f "$LOGIN_FILE" ]; then grep -v '^URL:' "$LOGIN_FILE" | sed 's/^/ /'; echo "  (saved in $LOGIN_FILE — change the password, then delete this file)"; echo; fi
 echo " Meta → WhatsApp → Configuration → Webhook"
 echo "   Callback URL   https://$API_DOMAIN/webhooks/whatsapp"
 echo "   Verify token   $VERIFY_TOKEN"
