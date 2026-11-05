@@ -175,6 +175,11 @@ PAYPAL_CURRENCY=USD
 # 1 KWD in PAYPAL_CURRENCY (PayPal cannot charge in KWD)
 PAYPAL_FX_RATE=3.26
 TAP_SECRET_KEY=
+# Mailgun (account emails: welcome, invoice, receipt). Leave the key empty to send no emails.
+MAILGUN_API_KEY=
+MAILGUN_DOMAIN=$DOMAIN
+MAILGUN_FROM="WappFlow <billing@$DOMAIN>"
+MAILGUN_REGION=us
 BANK_DETAILS=
 
 ADMIN_EMAIL=$ADMIN_EMAIL
@@ -193,6 +198,10 @@ EOF
 else
   sed -i "s#^APP_URL=.*#APP_URL=https://$ADMIN_DOMAIN#; s#^API_URL=.*#API_URL=https://$API_DOMAIN#; s#^SITE_URL=.*#SITE_URL=https://$WEB_DOMAIN,https://$APEX_DOMAIN#" "$ENV_FILE"
   if [ -f "$LOGIN_FILE" ]; then sed -i "s#^URL: .*#URL:      https://$ADMIN_DOMAIN/login#" "$LOGIN_FILE"; fi
+  if ! grep -q '^MAILGUN_API_KEY=' "$ENV_FILE"; then
+    printf '\n# Mailgun (account emails: welcome, invoice, receipt). Leave the key empty to send no emails.\nMAILGUN_API_KEY=\nMAILGUN_DOMAIN=%s\nMAILGUN_FROM="WappFlow <billing@%s>"\n# us or eu, the region of your Mailgun account\nMAILGUN_REGION=us\n' "$DOMAIN" "$DOMAIN" >> "$ENV_FILE"
+    c_ok "Added Mailgun settings to $ENV_FILE (empty until you add the key)"
+  fi
   if ! grep -q '^PAYPAL_CLIENT_ID=' "$ENV_FILE"; then
     printf '\n# PayPal (developer.paypal.com → Apps & Credentials). Leave empty to hide PayPal.\nPAYPAL_CLIENT_ID=\nPAYPAL_SECRET=\nPAYPAL_MODE=live\nPAYPAL_CURRENCY=USD\n# 1 KWD in PAYPAL_CURRENCY (PayPal cannot charge in KWD)\nPAYPAL_FX_RATE=3.26\n' >> "$ENV_FILE"
     c_ok "Added PayPal settings to $ENV_FILE (empty until you fill them in)"

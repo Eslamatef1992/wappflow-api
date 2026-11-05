@@ -2,8 +2,10 @@
 import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import { db, s, now, insert, period } from '../db.js';
+import { config } from '../config.js';
 import { h, bad, notFound, required, paginate, slugify } from '../lib/util.js';
 import { requireAuth, requireSuperadmin, signToken, publicUser } from '../lib/auth.js';
+import { queueEmail, mailEnabled, sendEmail, buildEmail } from '../services/email.js';
 import { serializePlan, createInvoice, markInvoicePaid, startTrial, usageFor, LIMIT_KEYS, FEATURE_KEYS } from '../services/billing.js';
 
 const r = Router();
@@ -71,6 +73,7 @@ r.post('/tenants', h(async (req, res) => {
     await insert('users', { tenant_id: id, name: req.body.name, email, role: 'owner', is_active: true, password_hash: await bcrypt.hash(req.body.password, 10), created_at: now() }, trx);
     return id;
   });
+  await queueEmail('welcome', { tenantId });
   res.status(201).json(await db('tenants').where({ id: tenantId }).first());
 }));
 
@@ -204,6 +207,27 @@ r.get('/jobs', h(async (_req, res) => {
   const failed = await db('jobs').where({ status: 'failed' }).orderBy('id', 'desc').limit(30);
   res.json({ byStatus: Object.fromEntries(byStatus.map((x) => [x.status, +x.c])), failed });
 }));
+// ---------- account emails (Mailgun) ----------
+r.get('/email', h(async (_req, res) => {
+  res.json({ enabled: mailEnabled(), from: mailEnabled() ? config.mailgun.from : null });
+}));
+/** Send a sample of each account email to check Mailgun: { to, kind: welcome|invoice|receipt } */
+r.post('/email/test', h(async (req, res) => {
+  if (!mailEnabled()) throw bad('Email is not set up. Add MAILGUN_API_KEY and MAILGUN_DOMAIN to the server settings.');
+  const to = String(req.body?.to || req.user.email).trim();
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(to)) throw bad('Enter a valid email address');
+  const kind = ['welcome', 'invoice', 'receipt'].includes(req.body?.kind) ? req.body.kind : 'welcome';
+  const t = now();
+  const sample = {
+    tenant: { name: 'Sample Store' }, owner: { name: req.user.name || 'there', email: to },
+    plan: { name: 'Growth' }, sub: { current_period_end: t + 30 * 86400000 },
+    invoice: { number: 'INV-SAMPLE', amount: 35, currency: 'KWD', notes: 'Growth plan (monthly)', due_at: t + 3 * 86400000, paid_at: t, provider: 'paypal' },
+  };
+  const mail = buildEmail(kind, sample);
+  const out = await sendEmail({ to, ...mail, subject: `[Test] ${mail.subject}` });
+  res.json({ ok: true, id: out.id || null });
+}));
+
 r.post('/jobs/:id/retry', h(async (req, res) => {
   await db('jobs').where({ id: req.params.id }).update({ status: 'pending', attempts: 0, run_at: now() });
   res.json({ ok: true });

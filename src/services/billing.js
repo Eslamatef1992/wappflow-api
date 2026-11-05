@@ -4,6 +4,7 @@ import { db, j, s, now, insert, period } from '../db.js';
 import { HttpError, bad } from '../lib/util.js';
 import { registerJob, enqueue } from '../lib/jobs.js';
 import { emitAdmin } from '../lib/events.js';
+import { queueEmail } from './email.js';
 
 const DAY = 86_400_000;
 export const LIMIT_KEYS = ['contacts', 'monthly_messages', 'agents', 'numbers', 'flows'];
@@ -110,6 +111,8 @@ export async function createInvoice({ tenantId, planId, interval = 'monthly', no
   });
   const invoice = await db('invoices').where({ id }).first();
   if (amount <= 0) await applyPaidInvoice(invoice, interval);
+  // emailed after 2 minutes: skipped automatically if it was paid or replaced by then (the receipt goes out instead)
+  else await queueEmail('invoice', { tenantId, invoiceId: id }, { delayMs: 2 * 60_000 });
   return invoice;
 }
 
@@ -140,6 +143,7 @@ export async function markInvoicePaid(invoiceId, { provider = 'manual', ref = nu
   const sub = await db('subscriptions').where({ tenant_id: inv.tenant_id }).orderBy('id', 'desc').first();
   await applyPaidInvoice({ ...inv, status: 'paid' }, sub?.billing_interval);
   emitAdmin('invoice.paid', { id: inv.id, tenant_id: inv.tenant_id });
+  await queueEmail('receipt', { tenantId: inv.tenant_id, invoiceId: inv.id });
   return db('invoices').where({ id: inv.id }).first();
 }
 

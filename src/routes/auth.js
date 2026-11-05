@@ -4,6 +4,7 @@ import { config } from '../config.js';
 import { db, now, insert } from '../db.js';
 import { h, bad, required, slugify, HttpError } from '../lib/util.js';
 import { signToken, publicUser, requireAuth } from '../lib/auth.js';
+import { queueEmail } from '../services/email.js';
 import { startTrial, planFor, usageFor, serializePlan, tapEnabled, isPreview } from '../services/billing.js';
 import { paypalEnabled } from '../services/paypal.js';
 
@@ -37,6 +38,7 @@ r.post('/signup', h(async (req, res) => {
     }, trx);
     return trx('users').where({ id: userId }).first();
   });
+  await queueEmail('welcome', { tenantId: user.tenant_id });
   res.status(201).json({ token: signToken(user), user: publicUser(user) });
 }));
 

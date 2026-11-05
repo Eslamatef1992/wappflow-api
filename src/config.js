@@ -54,6 +54,11 @@ export const config = {
     verifyToken: env.META_VERIFY_TOKEN || 'wappflow-verify-token',
     embeddedSignupConfigId: env.META_ES_CONFIG_ID || '',
   },
+  mailgun: {
+    apiKey: env.MAILGUN_API_KEY || '', domain: env.MAILGUN_DOMAIN || '', region: env.MAILGUN_REGION === 'eu' ? 'eu' : 'us',
+    from: env.MAILGUN_FROM || `${env.BRAND_NAME || 'WappFlow'} <billing@${env.MAILGUN_DOMAIN || 'example.com'}>`,
+    replyTo: env.MAILGUN_REPLY_TO || '', apiBase: env.MAILGUN_API_BASE || '',
+  },
   paypal: {
     clientId: env.PAYPAL_CLIENT_ID || '',
     secret: env.PAYPAL_SECRET || '',
