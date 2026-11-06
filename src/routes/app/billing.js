@@ -50,7 +50,7 @@ r.post('/billing/subscribe', requireRole('owner', 'admin'), h(async (req, res) =
   // same plan clicked again: reuse its open invoice instead of issuing a new one
   const same = await db('invoices').where({ tenant_id: req.tenant.id, status: 'unpaid', plan_id: plan.id }).andWhere('notes', 'like', `%(${interval})%`).first();
   if (same) return res.json(quote(same));
-  await db('invoices').where({ tenant_id: req.tenant.id, status: 'unpaid' }).update({ status: 'void', notes: 'Replaced by a new plan selection' });
+  await db('invoices').where({ tenant_id: req.tenant.id, status: 'unpaid' }).whereNull('credits').update({ status: 'void', notes: 'Replaced by a new plan selection' });
   const sub = await db('subscriptions').where({ tenant_id: req.tenant.id }).orderBy('id', 'desc').first();
   if (sub) await db('subscriptions').where({ id: sub.id }).update({ billing_interval: interval });
   const invoice = await createInvoice({ tenantId: req.tenant.id, planId: plan.id, interval, dueInDays: 3 });

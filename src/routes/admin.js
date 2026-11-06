@@ -6,6 +6,7 @@ import { config } from '../config.js';
 import { h, bad, notFound, required, paginate, slugify } from '../lib/util.js';
 import { requireAuth, requireSuperadmin, signToken, publicUser } from '../lib/auth.js';
 import { queueEmail, mailEnabled, sendEmail, buildEmail } from '../services/email.js';
+import { addCredits } from '../services/otp.js';
 import { serializePlan, createInvoice, markInvoicePaid, startTrial, usageFor, LIMIT_KEYS, FEATURE_KEYS } from '../services/billing.js';
 
 const r = Router();
@@ -128,7 +129,7 @@ r.delete('/tenants/:id', h(async (req, res) => {
     await trx('conversations').where({ tenant_id: tid }).del();
     await trx('campaign_recipients').whereIn('campaign_id', ids('campaigns')).del();
     await trx('contact_tags').whereIn('contact_id', ids('contacts')).del();
-    for (const table of ['campaigns', 'sales_invoices', 'orders', 'automations', 'integrations', 'products', 'flows', 'templates',
+    for (const table of ['otp_codes', 'credit_ledger', 'campaigns', 'sales_invoices', 'orders', 'automations', 'integrations', 'products', 'flows', 'templates',
       'quick_replies', 'tags', 'contacts', 'api_keys', 'webhook_endpoints', 'wa_numbers', 'usage_counters', 'invoices', 'subscriptions', 'users']) {
       if (await trx.schema.hasTable(table)) await trx(table).where({ tenant_id: tid }).del();
     }
@@ -207,6 +208,42 @@ r.get('/jobs', h(async (_req, res) => {
   const failed = await db('jobs').where({ status: 'failed' }).orderBy('id', 'desc').limit(30);
   res.json({ byStatus: Object.fromEntries(byStatus.map((x) => [x.status, +x.c])), failed });
 }));
+// ---------- WhatsApp OTP credit packs ----------
+const packIn = (b) => {
+  const credits = Math.floor(+b.credits); const price = +b.price;
+  if (!String(b.name || '').trim()) throw bad('Name is required');
+  if (!(credits > 0)) throw bad('Credits must be more than 0');
+  if (!(price >= 0)) throw bad('Price must be 0 or more');
+  return { name: String(b.name).trim().slice(0, 80), name_ar: b.name_ar ? String(b.name_ar).trim().slice(0, 80) : null, credits, price,
+    currency: String(b.currency || 'KWD').toUpperCase().slice(0, 3), is_active: b.is_active !== false, sort: +b.sort || 0 };
+};
+r.get('/otp-packs', h(async (_req, res) => {
+  res.json({ data: (await db('otp_packs').orderBy(['sort', 'credits'])).map((p) => ({ ...p, price: +p.price, is_active: !!p.is_active })) });
+}));
+r.post('/otp-packs', h(async (req, res) => {
+  const id = await insert('otp_packs', { ...packIn(req.body || {}), created_at: now() });
+  res.status(201).json(await db('otp_packs').where({ id }).first());
+}));
+r.patch('/otp-packs/:id', h(async (req, res) => {
+  const p = await db('otp_packs').where({ id: req.params.id }).first();
+  if (!p) throw notFound('Pack');
+  await db('otp_packs').where({ id: p.id }).update(packIn({ ...p, ...req.body, is_active: req.body.is_active ?? !!p.is_active }));
+  res.json(await db('otp_packs').where({ id: p.id }).first());
+}));
+r.delete('/otp-packs/:id', h(async (req, res) => {
+  await db('otp_packs').where({ id: req.params.id }).update({ is_active: false }); // kept for old invoices
+  res.json({ ok: true });
+}));
+/** Give (or take back, with a negative number) OTP credits: { credits, note } */
+r.post('/tenants/:id/credits', h(async (req, res) => {
+  const t = await db('tenants').where({ id: req.params.id }).first();
+  if (!t) throw notFound('Tenant');
+  const delta = Math.trunc(+req.body?.credits);
+  if (!delta) throw bad('Enter a number of credits (negative to remove)');
+  const balance = await addCredits(t.id, delta, { reason: 'grant', ref: String(req.body?.note || '').slice(0, 64) || null, userId: req.user.id });
+  res.json({ credits: balance });
+}));
+
 // ---------- account emails (Mailgun) ----------
 r.get('/email', h(async (_req, res) => {
   res.json({ enabled: mailEnabled(), from: mailEnabled() ? config.mailgun.from : null });

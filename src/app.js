@@ -22,6 +22,7 @@ import settings from './routes/app/settings.js';
 import billing from './routes/app/billing.js';
 import analytics from './routes/app/analytics.js';
 import invoices from './routes/app/invoices.js';
+import otp from './routes/app/otp.js';
 import invoicePage from './routes/invoicePage.js';
 
 export function createApp() {
@@ -46,7 +47,7 @@ export function createApp() {
   tenantApp.use(requireAuth);
   tenantApp.use(requireTenant({ allowSuspended: true }), billing); // billing stays reachable while suspended
   tenantApp.use(requireTenant());
-  for (const r of [analytics, contacts, inbox, templates, campaigns, flows, commerce, invoices, settings]) tenantApp.use(r);
+  for (const r of [analytics, contacts, inbox, templates, campaigns, flows, commerce, invoices, otp, settings]) tenantApp.use(r);
   app.use('/api/app', tenantApp);
 
   // serve the built admin dashboard from the same server in production.

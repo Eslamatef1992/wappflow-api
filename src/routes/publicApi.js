@@ -6,6 +6,7 @@ import { requireApiKey } from '../lib/auth.js';
 import { assertFeature, assertLimit } from '../services/billing.js';
 import { sendToContact, buildTemplateMessage, contactCtx } from '../services/messaging.js';
 import { upsertContact, serializeContact, createOrUpdateOrder, setOrderStatus } from '../services/commerce.js';
+import { sendOtp, verifyOtp, creditBalance } from '../services/otp.js';
 import { createSalesInvoice, sendInvoice, setInvoiceStatus, findInvoice, serializeInvoice, withDelivery } from '../services/invoices.js';
 
 const r = Router();
@@ -95,6 +96,29 @@ r.patch('/orders/:id', h(async (req, res) => {
   if (!o) throw notFound('Order');
   if (!['created', 'paid', 'shipped', 'delivered', 'canceled'].includes(req.body.status)) throw bad('Invalid status');
   res.json(await setOrderStatus(req.tenant, o, req.body.status, req.body.meta || {}));
+}));
+
+// ---------- WhatsApp OTP ----------
+const otpFeature = h(async (req, _res, next) => { await assertFeature(req.tenant, 'otp'); next(); });
+
+/**
+ * POST /api/v1/otp/send   { "phone": "+96550000000", "length": 6, "expiry_minutes": 10, "language": "en", "reference": "user-42" }
+ * Sends a one-time code on WhatsApp (uses 1 credit). → { id, status: "sent", expires_at, credits_left }
+ */
+r.post('/otp/send', otpFeature, h(async (req, res) => {
+  res.status(201).json(await sendOtp(req.tenant, req.body || {}));
+}));
+
+/**
+ * POST /api/v1/otp/verify   { "phone": "+96550000000", "code": "123456" }
+ * → { "valid": true }  or  { "valid": false, "reason": "invalid_code" | "expired" | "too_many_attempts" | "already_used" | "not_found" }
+ */
+r.post('/otp/verify', otpFeature, h(async (req, res) => {
+  res.json(await verifyOtp(req.tenant, req.body || {}));
+}));
+
+r.get('/otp/balance', otpFeature, h(async (req, res) => {
+  res.json({ credits: await creditBalance(req.tenant.id) });
 }));
 
 // ---------- invoices ----------

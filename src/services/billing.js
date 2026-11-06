@@ -116,8 +116,29 @@ export async function createInvoice({ tenantId, planId, interval = 'monthly', no
   return invoice;
 }
 
+/** Invoice for an OTP credit pack. Paid the same way as plan invoices (card / PayPal / manual). */
+export async function createCreditInvoice({ tenantId, packId }) {
+  const pack = await db('otp_packs').where({ id: packId, is_active: true }).first();
+  if (!pack) throw bad('This credit pack is not available');
+  // only one open credit invoice at a time: picking another pack replaces it
+  await db('invoices').where({ tenant_id: tenantId, status: 'unpaid' }).whereNotNull('credits').update({ status: 'void', notes: 'Replaced by another credit pack' });
+  const id = await insert('invoices', {
+    number: await nextInvoiceNumber(), tenant_id: tenantId, subscription_id: null, plan_id: null,
+    otp_pack_id: pack.id, credits: pack.credits, amount: +pack.price, currency: pack.currency, status: 'unpaid',
+    notes: `${pack.credits.toLocaleString('en-US')} WhatsApp OTP credits`, due_at: now() + 3 * DAY, created_at: now(),
+  });
+  await queueEmail('invoice', { tenantId, invoiceId: id }, { delayMs: 2 * 60_000 });
+  return db('invoices').where({ id }).first();
+}
+
 /** Called after payment (manual or online). Activates/extends the subscription. */
 export async function applyPaidInvoice(invoice, interval) {
+  // an OTP credit pack: add the credits, the plan is not touched
+  if (+invoice.credits > 0) {
+    const { addCredits } = await import('./otp.js');
+    await addCredits(invoice.tenant_id, +invoice.credits, { reason: 'purchase', ref: invoice.number });
+    return;
+  }
   const sub = await db('subscriptions').where({ tenant_id: invoice.tenant_id }).orderBy('id', 'desc').first();
   const iv = interval || sub?.billing_interval || 'monthly';
   const start = Math.max(now(), sub?.status === 'active' ? sub.current_period_end || 0 : 0);
@@ -198,7 +219,7 @@ export async function runBillingCycle() {
   // 1) periods that ended → issue renewal invoice and move to past_due
   const due = await db('subscriptions').whereIn('status', config.trialDays > 0 ? ['trialing', 'active'] : ['active']).andWhere('current_period_end', '<', t);
   for (const sub of due) {
-    const open = await db('invoices').where({ tenant_id: sub.tenant_id, status: 'unpaid' }).first();
+    const open = await db('invoices').where({ tenant_id: sub.tenant_id, status: 'unpaid' }).whereNull('credits').first();
     if (!open) await createInvoice({ tenantId: sub.tenant_id, planId: sub.plan_id, interval: sub.billing_interval, periodStart: sub.current_period_end });
     const fresh = await db('subscriptions').where({ id: sub.id }).first();
     if (fresh.current_period_end < t) {
@@ -209,7 +230,7 @@ export async function runBillingCycle() {
   }
   // 2) unpaid invoices past their due date → suspend the workspace
   //    (only when the paid/trial period is also over: picking a new plan mid-period never locks anyone out early)
-  const overdue = await db('invoices').where({ status: 'unpaid' }).andWhere('due_at', '<', t).select('tenant_id');
+  const overdue = await db('invoices').where({ status: 'unpaid' }).whereNull('credits').andWhere('due_at', '<', t).select('tenant_id');
   const ids = [];
   for (const tid of new Set(overdue.map((o) => o.tenant_id))) {
     const sub = await db('subscriptions').where({ tenant_id: tid }).orderBy('id', 'desc').first();

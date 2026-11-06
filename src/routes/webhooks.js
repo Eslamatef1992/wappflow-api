@@ -66,7 +66,10 @@ r.post('/hooks/woocommerce/:token', h(async (req, res) => {
 r.get('/api/billing/paypal/return', h(async (req, res) => {
   let paid = null;
   try { paid = await capturePaypalOrder(req.query.token); } catch (e) { console.error('[paypal] return', e.message); }
-  res.redirect(`${config.appUrl}/app/billing?payment=${paid ? 'success' : 'pending'}`);
+  // credit packs come back to the OTP page, plan invoices to billing
+  const inv = paid || (req.query.token && await db('invoices').where({ provider: 'paypal', provider_ref: String(req.query.token) }).first());
+  const page = +inv?.credits > 0 ? 'otp' : 'billing';
+  res.redirect(`${config.appUrl}/app/${page}?payment=${paid ? 'success' : 'pending'}`);
 }));
 // Backup for customers who close the window after paying. The body is only used to find the
 // order id; the payment itself is verified by calling PayPal's API.

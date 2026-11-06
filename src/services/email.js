@@ -88,6 +88,27 @@ export function buildEmail(kind, { tenant, owner, invoice, plan, sub }) {
       ],
       button: { label: 'افتح لوحة التحكم', url: `${config.appUrl}/app?lang=ar` },
     };
+  } else if ((kind === 'invoice' || kind === 'receipt') && +invoice?.credits > 0) {
+    // WhatsApp OTP credit pack
+    const amount = money(invoice.amount, invoice.currency);
+    const credits = (+invoice.credits).toLocaleString('en-US');
+    const otpPage = `${config.appUrl}/app/otp`;
+    if (kind === 'invoice') {
+      subject = `Invoice ${invoice.number} · ${credits} OTP credits`;
+      preheader = 'Your OTP credits are ready to pay.';
+      en = { title: `Invoice ${esc(invoice.number)}`, paras: [`Hi ${name}, here is the invoice for ${credits} WhatsApp OTP credits for <b>${esc(tenant.name)}</b>. The credits are added as soon as it is paid.`],
+        rows: [['Credits', credits], ['Amount', amount], ['Due', day(invoice.due_at, 'en')]], button: { label: 'Pay now', url: otpPage } };
+      ar = { title: `فاتورة ${esc(invoice.number)}`, paras: [`مرحباً ${name}، هذه فاتورة ${credits} رصيد رموز تحقق واتساب لـ <b>${esc(tenant.name)}</b>. يُضاف الرصيد فور الدفع.`],
+        rows: [['الرصيد', credits], ['المبلغ', amount], ['تاريخ الاستحقاق', day(invoice.due_at, 'ar')]], button: { label: 'ادفع الآن', url: `${otpPage}?lang=ar` } };
+    } else {
+      const balance = (+tenant.otp_credits || 0).toLocaleString('en-US');
+      subject = `Payment received · ${credits} OTP credits added`;
+      preheader = `Your OTP balance is now ${balance} credits.`;
+      en = { title: 'Payment received. Thank you!', paras: [`Hi ${name}, <b>${credits}</b> WhatsApp OTP credits were added to <b>${esc(tenant.name)}</b>. Your balance is now <b>${balance}</b> credits.`],
+        rows: [['Invoice', esc(invoice.number)], ['Credits added', credits], ['Amount paid', amount], ['Date', day(invoice.paid_at, 'en')]], button: { label: 'Open OTP', url: otpPage } };
+      ar = { title: 'تم استلام الدفع. شكراً لك!', paras: [`مرحباً ${name}، أُضيف <b>${credits}</b> رصيد رموز تحقق واتساب إلى <b>${esc(tenant.name)}</b>. رصيدك الآن <b>${balance}</b>.`],
+        rows: [['الفاتورة', esc(invoice.number)], ['الرصيد المضاف', credits], ['المبلغ المدفوع', amount], ['التاريخ', day(invoice.paid_at, 'ar')]], button: { label: 'افتح صفحة الرموز', url: `${otpPage}?lang=ar` } };
+    }
   } else if (kind === 'invoice') {
     const amount = money(invoice.amount, invoice.currency);
     subject = `Invoice ${invoice.number} · ${amount}`;

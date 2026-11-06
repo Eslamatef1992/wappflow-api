@@ -77,7 +77,7 @@ export async function createPaypalOrder(invoice, tenant, { card = false } = {}) 
           landing_page: card ? 'GUEST_CHECKOUT' : 'LOGIN',
           shipping_preference: 'NO_SHIPPING',
           return_url: `${config.apiUrl}/api/billing/paypal/return`,
-          cancel_url: `${config.appUrl}/app/billing?payment=canceled`,
+          cancel_url: `${config.appUrl}/app/${+invoice.credits > 0 ? 'otp' : 'billing'}?payment=canceled`,
         },
       },
     },
