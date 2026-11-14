@@ -7,7 +7,7 @@ import { h, bad, notFound, required, paginate, slugify } from '../lib/util.js';
 import { requireAuth, requireSuperadmin, signToken, publicUser } from '../lib/auth.js';
 import { queueEmail, mailEnabled, sendEmail, buildEmail } from '../services/email.js';
 import { addCredits } from '../services/otp.js';
-import { serializePlan, createInvoice, markInvoicePaid, startTrial, usageFor, LIMIT_KEYS, FEATURE_KEYS } from '../services/billing.js';
+import { serializePlan, createInvoice, markInvoicePaid, activateTenant, startTrial, usageFor, LIMIT_KEYS, FEATURE_KEYS } from '../services/billing.js';
 
 const r = Router();
 r.use(requireAuth, requireSuperadmin);
@@ -115,6 +115,14 @@ r.patch('/tenants/:id', h(async (req, res) => {
   if (Object.keys(patch).length) await db('tenants').where({ id: t.id }).update(patch);
   await insert('audit_logs', { user_id: req.user.id, tenant_id: t.id, action: 'tenant.update', meta: s(req.body), created_at: now() });
   res.json(await db('tenants').where({ id: t.id }).first());
+}));
+
+/** Activate as paid: { planId, interval, periods | until, amount, reference, sendReceipt } */
+r.post('/tenants/:id/activate', h(async (req, res) => {
+  const b = req.body || {};
+  const result = await activateTenant({ tenantId: +req.params.id, planId: +b.planId, interval: b.interval || 'monthly', periods: b.periods, until: b.until || null, amount: b.amount, reference: b.reference ? String(b.reference).slice(0, 120) : null, sendReceipt: b.sendReceipt !== false });
+  await insert('audit_logs', { user_id: req.user.id, tenant_id: +req.params.id, action: 'tenant.activate', meta: s(b), created_at: now() });
+  res.json(result);
 }));
 
 r.delete('/tenants/:id', h(async (req, res) => {

@@ -168,6 +168,51 @@ export async function markInvoicePaid(invoiceId, { provider = 'manual', ref = nu
   return db('invoices').where({ id: inv.id }).first();
 }
 
+/**
+ * Admin: activate a workspace as paid (cash, KNET, bank transfer, or free) without the customer paying online.
+ * Records a paid invoice, makes the subscription active until the chosen end date, unlocks the workspace
+ * (also preview workspaces: live numbers and real sending work right away) and voids open plan invoices.
+ */
+export async function activateTenant({ tenantId, planId, interval = 'monthly', periods = 1, until = null, amount = null, reference = null, sendReceipt = true }) {
+  const tenant = await db('tenants').where({ id: tenantId }).first();
+  if (!tenant) throw bad('Workspace not found');
+  const plan = await db('plans').where({ id: planId }).first();
+  if (!plan) throw bad('Plan not found');
+  if (!['monthly', 'yearly'].includes(interval)) throw bad('Billing period must be monthly or yearly');
+  const n = Math.floor(+periods || 1);
+  if (n < 1 || n > 36) throw bad('Choose between 1 and 36 periods');
+  const t = now();
+  const sub = await db('subscriptions').where({ tenant_id: tenantId }).orderBy('id', 'desc').first();
+  // a paid period that is still running continues from its end; otherwise it starts today
+  const start = sub?.status === 'active' && +sub.current_period_end > t ? +sub.current_period_end : t;
+  let end;
+  if (until != null && until !== '') {
+    end = typeof until === 'number' ? until : Date.parse(String(until).slice(0, 10) + 'T23:59:59Z');
+    if (!Number.isFinite(end) || end <= t) throw bad('The end date must be in the future');
+  } else {
+    end = start;
+    for (let i = 0; i < n; i++) end = addInterval(end, interval);
+  }
+  const unit = interval === 'yearly' ? +plan.price_yearly || +plan.price_monthly * 12 : +plan.price_monthly;
+  const total = amount === null || amount === undefined || amount === '' ? unit * n : Math.max(+amount || 0, 0);
+  const label = until ? `until ${new Date(end).toISOString().slice(0, 10)}` : `${n} × ${interval === 'yearly' ? 'year' : 'month'}`;
+
+  await db('invoices').where({ tenant_id: tenantId, status: 'unpaid' }).whereNull('credits').update({ status: 'void', notes: 'Replaced: activated by admin' });
+  const id = await insert('invoices', {
+    number: await nextInvoiceNumber(), tenant_id: tenantId, subscription_id: sub?.id || null, plan_id: plan.id,
+    amount: total, currency: plan.currency, status: 'paid', provider: 'manual', provider_ref: reference || null,
+    notes: `${plan.name} plan (${label}) · activated by admin${total ? '' : ' · free'}`,
+    period_start: start, period_end: end, due_at: t, created_at: t, paid_at: t,
+  });
+  const row = { plan_id: plan.id, status: 'active', billing_interval: interval, current_period_start: start, current_period_end: end };
+  if (sub) await db('subscriptions').where({ id: sub.id }).update(row);
+  else await insert('subscriptions', { tenant_id: tenantId, ...row, created_at: t });
+  await db('tenants').where({ id: tenantId }).update({ status: 'active', plan_id: plan.id, trial_ends_at: null });
+  emitAdmin('invoice.paid', { id, tenant_id: tenantId });
+  if (sendReceipt && total > 0) await queueEmail('receipt', { tenantId, invoiceId: id });
+  return { invoice: await db('invoices').where({ id }).first(), subscription: await db('subscriptions').where({ tenant_id: tenantId }).orderBy('id', 'desc').first() };
+}
+
 // ---------------- Tap Payments (KNET / cards / Apple Pay) ----------------
 // Verify field names against Tap's current docs in sandbox before going live.
 export const tapEnabled = () => !!config.tap.secretKey;
