@@ -1,6 +1,7 @@
 // Super-admin panel API: the platform owner manages tenants, plans, invoices and health.
 import { Router } from 'express';
 import bcrypt from 'bcryptjs';
+import { randomBytes } from 'node:crypto';
 import { db, s, now, insert, period } from '../db.js';
 import { config } from '../config.js';
 import { h, bad, notFound, required, paginate, slugify } from '../lib/util.js';
@@ -51,7 +52,7 @@ r.get('/tenants', h(async (req, res) => {
   const rows = await q.select('t.*', 'p.name as plan_name').orderBy('t.id', 'desc').limit(limit).offset(offset);
   const p = period();
   const usage = await db('usage_counters').where({ period: p }).whereIn('tenant_id', rows.map((x) => x.id));
-  const owners = await db('users').whereIn('tenant_id', rows.map((x) => x.id)).where({ role: 'owner' }).select('tenant_id', 'email', 'name');
+  const owners = await db('users').whereIn('tenant_id', rows.map((x) => x.id)).where({ role: 'owner' }).select('id', 'tenant_id', 'email', 'name');
   res.json({
     total,
     data: rows.map((t) => ({
@@ -115,6 +116,19 @@ r.patch('/tenants/:id', h(async (req, res) => {
   if (Object.keys(patch).length) await db('tenants').where({ id: t.id }).update(patch);
   await insert('audit_logs', { user_id: req.user.id, tenant_id: t.id, action: 'tenant.update', meta: s(req.body), created_at: now() });
   res.json(await db('tenants').where({ id: t.id }).first());
+}));
+
+/** Set a new password for any workspace user (owner or team). Leave it empty to generate one. Shown once to the admin. */
+r.post('/users/:id/password', h(async (req, res) => {
+  const user = await db('users').where({ id: +req.params.id }).first();
+  if (!user || user.role === 'superadmin') throw bad('User not found');
+  let password = String(req.body?.password ?? '').trim();
+  if (!password) password = randomBytes(12).toString('base64url').replace(/[-_]/g, 'x').slice(0, 12);
+  if (password.length < 8) throw bad('The password must be at least 8 characters');
+  if (password.length > 128) throw bad('The password is too long');
+  await db('users').where({ id: user.id }).update({ password_hash: await bcrypt.hash(password, 10), is_active: true });
+  await insert('audit_logs', { user_id: req.user.id, tenant_id: user.tenant_id, action: 'user.password_reset', meta: s({ user_id: user.id, email: user.email }), created_at: now() });
+  res.json({ ok: true, email: user.email, name: user.name, password });
 }));
 
 /** Activate as paid: { planId, interval, periods | until, amount, reference, sendReceipt } */

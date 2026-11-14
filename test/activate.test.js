@@ -76,3 +76,21 @@ test('activating again while paid continues from the current end date', async ()
   assert.ok(added >= 89 && added <= 93, `3 months added (${added})`);
   assert.equal(+r.data.invoice.amount, +plan.price_monthly * 3);
 });
+
+test('an admin can reset a workspace user password', async () => {
+  const owners = (await call('GET', '/api/admin/tenants')).data.data.map((t) => t.owner).filter(Boolean);
+  const o = owners.find((x) => x.email === 'owner@demo.local');
+  assert.ok(o.id);
+  assert.equal((await call('POST', `/api/admin/users/${o.id}/password`, { password: 'short' })).status, 400);
+  assert.equal((await call('POST', `/api/admin/users/${o.id}/password`, { password: 'NewPass!!2026' }, owner)).status, 403);
+  const r = await call('POST', `/api/admin/users/${o.id}/password`, { password: 'NewPass!!2026' });
+  assert.equal(r.data.password, 'NewPass!!2026');
+  const login = async (pw) => (await fetch(`${base}/api/auth/login`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: 'owner@demo.local', password: pw }) })).status;
+  assert.equal(await login('demo12345'), 401);
+  assert.equal(await login('NewPass!!2026'), 200);
+  const gen = (await call('POST', `/api/admin/users/${o.id}/password`, {})).data.password;
+  assert.equal(gen.length, 12);
+  assert.equal(await login(gen), 200);
+  const adminUser = await db('users').where({ role: 'superadmin' }).first();
+  assert.equal((await call('POST', `/api/admin/users/${adminUser.id}/password`, { password: 'whatever123' })).status, 400);
+});
